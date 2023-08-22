@@ -7,7 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0.
 
-from typing import Any, List, Optional, Sequence
+from typing import Any, List, LiteralString, Optional, Sequence
 
 import psycopg
 from psycopg.connection import Connection
@@ -20,7 +20,7 @@ from materialize.cloudtest.util.web_request import post
 
 def sql_query(
     conn: Connection[Any],
-    query: str,
+    query: LiteralString,
     vars: Optional[Sequence[Any]] = None,
 ) -> List[List[Any]]:
     cur = conn.cursor()
@@ -30,10 +30,29 @@ def sql_query(
 
 def sql_execute(
     conn: Connection[Any],
-    query: str,
+    query: LiteralString,
     vars: Optional[Sequence[Any]] = None,
 ) -> None:
     cur = conn.cursor()
+    cur.execute(query, vars)
+
+
+def sql_query_ddl(
+    conn: Connection[Any],
+    query: LiteralString,
+    vars: Optional[Sequence[Any]] = None,
+) -> List[List[Any]]:
+    cur = psycopg.ClientCursor(conn)
+    cur.execute(query, vars)
+    return [list(row) for row in cur]
+
+
+def sql_execute_ddl(
+    conn: Connection[Any],
+    query: LiteralString,
+    vars: Optional[Sequence[Any]] = None,
+) -> None:
+    cur = psycopg.ClientCursor(conn)
     cur.execute(query, vars)
 
 
