@@ -58,7 +58,7 @@ class Crate:
         self.path_build_dependencies: set[str] = set()
         self.path_dev_dependencies: set[str] = set()
         self.path_dependencies: set[str] = set()
-        for (dep_type, field) in [
+        for dep_type, field in [
             ("build-dependencies", self.path_build_dependencies),
             ("dev-dependencies", self.path_dev_dependencies),
             ("dependencies", self.path_dependencies),
@@ -167,8 +167,7 @@ class Workspace:
         Args:
             bin: The name of the binary to find.
 
-        Raises:
-            ValueError: The named binary did not exist in exactly one crate in
+        Raises: ValueError: The named binary did not exist in exactly one crate in
                 the Cargo workspace.
         """
         out = None
@@ -207,8 +206,24 @@ class Workspace:
             raise ValueError(f"example {example} does not exist in cargo workspace")
         return out
 
+
+class WorkspaceGroup:
+    """A group of Cargo workspaces.
+
+    Args:
+        workspaces: the list of workspaces to consider for path dependencies.
+    """
+
+    def __init__(self, workspaces: list[Workspace]):
+        self.workspaces = workspaces
+
+    def __getitem__(self, index: int):
+        return self.workspaces[index]
+
     def transitive_path_dependencies(
-        self, crate: Crate, dev: bool = False
+        self,
+        crate: Crate,
+        dev: bool = False,
     ) -> set[Crate]:
         """Collects the transitive path dependencies of the requested crate.
 
@@ -232,12 +247,20 @@ class Workspace:
         def visit(c: Crate) -> None:
             deps.add(c)
             for d in c.path_dependencies:
-                visit(self.crates[d])
+                for workspace in self.workspaces:
+                    if d in workspace.crates:
+                        visit(workspace.crates[d])
+                        break
             for d in c.path_build_dependencies:
-                visit(self.crates[d])
+                for workspace in self.workspaces:
+                    if d in workspace.crates:
+                        visit(workspace.crates[d])
+                        break
 
         visit(crate)
         if dev:
             for d in crate.path_dev_dependencies:
-                visit(self.crates[d])
+                for workspace in self.workspaces:
+                    if d in workspace.crates:
+                        visit(workspace.crates[d])
         return deps

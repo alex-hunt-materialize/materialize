@@ -18,7 +18,11 @@ set -euo pipefail
 
 NIGHTLY_RUST_DATE=2024-01-01
 
-cd "$(dirname "$0")/.."
+if [ -n "${MZ_ROOT}" ]; then
+    cd "${MZ_ROOT}"
+else
+    cd "$(dirname "$0")/.."
+fi
 
 . misc/shlib/shlib.bash
 
@@ -226,6 +230,7 @@ case "$cmd" in
             --env PRODUCTION_SANDBOX_APP_PASSWORD
             --env PYPI_TOKEN
             --env MZ_DEV_BUILD_SHA
+            --env "MZ_ROOT=$(pwd)"
             --env BUILDKITE_SENTRY_DSN
             # For Miri with nightly Rust
             --env ZOOKEEPER_ADDR

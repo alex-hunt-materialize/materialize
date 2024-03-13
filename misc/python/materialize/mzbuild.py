@@ -73,12 +73,21 @@ class RepositoryDetails:
         arch: Arch,
         release_mode: bool,
         coverage: bool,
+        secondary_cargo_workspaces: list[Path] | None = None,
     ):
         self.root = root
         self.arch = arch
         self.release_mode = release_mode
         self.coverage = coverage
-        self.cargo_workspace = cargo.Workspace(root)
+        self.cargo_workspaces = cargo.WorkspaceGroup(
+            [
+                cargo.Workspace(root),
+                *[
+                    cargo.Workspace(workspace)
+                    for workspace in (secondary_cargo_workspaces or [])
+                ],
+            ]
+        )
 
     def cargo(
         self, subcommand: str, rustflags: list[str], channel: str | None = None
@@ -378,13 +387,14 @@ class CargoBuild(CargoPreImage):
         deps = set()
 
         for bin in self.bins:
-            crate = self.rd.cargo_workspace.crate_for_bin(bin)
-            deps |= self.rd.cargo_workspace.transitive_path_dependencies(crate)
+            crate = self.rd.cargo_workspaces[0].crate_for_bin(bin)
+            deps |= self.rd.cargo_workspaces.transitive_path_dependencies(crate)
 
         for example in self.examples:
-            crate = self.rd.cargo_workspace.crate_for_example(example)
-            deps |= self.rd.cargo_workspace.transitive_path_dependencies(
-                crate, dev=True
+            crate = self.rd.cargo_workspaces[0].crate_for_example(example)
+            deps |= self.rd.cargo_workspaces.transitive_path_dependencies(
+                crate,
+                dev=True,
             )
 
         return super().inputs() | set(inp for dep in deps for inp in dep.inputs())
@@ -484,12 +494,18 @@ class ResolvedImage:
             each of the images that `image` depends upon.
     """
 
-    def __init__(self, image: Image, dependencies: Iterable["ResolvedImage"]):
+    def __init__(
+        self,
+        image: Image,
+        dependencies: Iterable["ResolvedImage"],
+        registry: str = "materialize",
+    ):
         self.image = image
         self.acquired = False
         self.dependencies = {}
         for d in dependencies:
             self.dependencies[d.name] = d
+        self.registry = registry
 
     def __repr__(self) -> str:
         return f"ResolvedImage<{self.spec()}>"
@@ -510,7 +526,7 @@ class ResolvedImage:
         A spec is the unique identifier for the image given its current
         fingerprint. It is a valid Docker Hub name.
         """
-        return f"materialize/{self.name}:mzbuild-{self.fingerprint()}"
+        return f"{self.registry}/{self.name}:mzbuild-{self.fingerprint()}"
 
     def write_dockerfile(self) -> IO[bytes]:
         """Render the Dockerfile without mzbuild directives.
@@ -827,7 +843,8 @@ class Repository:
         self.compositions: dict[str, Path] = {}
         for path, dirs, files in os.walk(self.root, topdown=True):
             if path == str(root / "misc"):
-                dirs.remove("python")
+                if "python" in dirs:
+                    dirs.remove("python")
             # Filter out some particularly massive ignored directories to keep
             # things snappy. Not required for correctness.
             dirs[:] = set(dirs) - {

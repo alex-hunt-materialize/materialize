@@ -54,7 +54,9 @@ def main(args: list[str]) -> int:
     py_path = str(py_dir.resolve())
     os.environ["PYTHONPATH"] = py_path
     os.environ["MYPYPATH"] = f"{py_path}:{py_path}/stubs"
-    os.environ["MZ_ROOT"] = str(root_dir.resolve())
+    if "MZ_ROOT" not in os.environ:
+        # allow override of the root for use in the cloud repo
+        os.environ["MZ_ROOT"] = str(root_dir.resolve())
     os.execvp(python, [python, *args])
 
 
