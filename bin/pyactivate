@@ -28,7 +28,7 @@ def main(args: list[str]) -> int:
     logger.debug("args=%s", args)
 
     # Validate Python version.
-    if sys.hexversion < 0x030a0000:
+    if sys.hexversion < 0x030A0000:
         print("fatal: python v3.10.0+ required", file=sys.stderr)
         print(
             " hint: you have v{}.{}.{}".format(
@@ -54,7 +54,9 @@ def main(args: list[str]) -> int:
     py_path = str(py_dir.resolve())
     os.environ["PYTHONPATH"] = py_path
     os.environ["MYPYPATH"] = f"{py_path}:{py_path}/stubs"
-    os.environ["MZ_ROOT"] = str(root_dir.resolve())
+    if "MZ_ROOT" not in os.environ:
+        # allow override of the root for use in the cloud repo
+        os.environ["MZ_ROOT"] = str(root_dir.resolve())
     os.execvp(python, [python, *args])
 
 
@@ -85,7 +87,7 @@ def activate_venv(py_dir: Path) -> Path:
             # new virtual env and bubble up when we exec later.
             print(
                 "warning: existing virtualenv is unable to execute python; will recreate",
-                file=sys.stderr
+                file=sys.stderr,
             )
             logger.info("python exec error: %s", e)
         print(f"==> Initializing virtualenv in {venv_dir}", file=sys.stderr)
@@ -144,7 +146,9 @@ def activate_venv(py_dir: Path) -> Path:
     return python
 
 
-def acquire_deps(venv_dir: Path, variant: Optional[str] = None, use_pep517: bool = False) -> None:
+def acquire_deps(
+    venv_dir: Path, variant: Optional[str] = None, use_pep517: bool = False
+) -> None:
     """Install normal/development dependencies into the virtualenv.
 
     If the use_pep517 flag is set, the `--use-pep517` flag is pased to `pip
@@ -168,17 +172,28 @@ def acquire_deps(venv_dir: Path, variant: Optional[str] = None, use_pep517: bool
         f"requirements-{variant}.txt" if variant else "requirements.txt"
     )
     requirements_mtime = os.path.getmtime(requirements_path)
-    logger.debug("requirements_path=%s requirements_mtime=%s", requirements_path, requirements_mtime)
+    logger.debug(
+        "requirements_path=%s requirements_mtime=%s",
+        requirements_path,
+        requirements_mtime,
+    )
 
     # Update dependencies, if necessary.
     if stamp_mtime <= requirements_mtime:
-        print(f"==> Updating {variant + ' ' if variant else ''}dependencies with pip", file=sys.stderr)
-        subprocess.check_call([
-                venv_dir / "bin" / "pip", "install", "-r", requirements_path,
+        print(
+            f"==> Updating {variant + ' ' if variant else ''}dependencies with pip",
+            file=sys.stderr,
+        )
+        subprocess.check_call(
+            [
+                venv_dir / "bin" / "pip",
+                "install",
+                "-r",
+                requirements_path,
                 "--disable-pip-version-check",
                 *(["--use-pep517"] if use_pep517 else []),
             ],
-            stdout=sys.stderr
+            stdout=sys.stderr,
         )
         stamp_path.touch()
 

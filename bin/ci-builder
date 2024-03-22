@@ -18,7 +18,13 @@ set -euo pipefail
 
 NIGHTLY_RUST_DATE=2024-04-19
 
-cd "$(dirname "$0")/.."
+# handle being called from a submodule
+mz_repo_root="$(cd "$(dirname "$0")/.."; pwd)"
+if [ -n "${MZ_ROOT}" ]; then
+    cd "${MZ_ROOT}"
+else
+    cd "${mz_repo_root}"
+fi
 
 . misc/shlib/shlib.bash
 
@@ -133,7 +139,7 @@ fi
 # a chicken-and-egg problem: mzbuild depends on the Python packages that are
 # *inside* this image. See materialize.git.expand_globs in the Python code for
 # details on this computation.
-files=$(cat \
+files=$(cd ${mz_repo_root}; cat \
         <(git diff --name-only -z 4b825dc642cb6eb9a060e54bf8d69288fbee4904 ci/builder) \
         <(git ls-files --others --exclude-standard -z ci/builder) \
     | LC_ALL=C sort -z \
@@ -229,6 +235,7 @@ case "$cmd" in
             --env PRODUCTION_SANDBOX_APP_PASSWORD
             --env PYPI_TOKEN
             --env MZ_DEV_BUILD_SHA
+            --env "MZ_ROOT=$(pwd)"
             --env BUILDKITE_SENTRY_DSN
             # For Miri with nightly Rust
             --env ZOOKEEPER_ADDR

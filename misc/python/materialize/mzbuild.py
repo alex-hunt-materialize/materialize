@@ -23,7 +23,6 @@ import json
 import multiprocessing
 import os
 import re
-import shlex
 import shutil
 import stat
 import subprocess
@@ -82,15 +81,24 @@ class RepositoryDetails:
         sanitizer: Sanitizer,
         image_registry: str,
         image_prefix: str,
+        secondary_cargo_workspaces: list[Path] | None = None,
     ):
         self.root = root
         self.arch = arch
         self.release_mode = release_mode
         self.coverage = coverage
         self.sanitizer = sanitizer
-        self.cargo_workspace = cargo.Workspace(root)
         self.image_registry = image_registry
         self.image_prefix = image_prefix
+        self.cargo_workspaces = cargo.WorkspaceGroup(
+            [
+                cargo.Workspace(root),
+                *[
+                    cargo.Workspace(workspace)
+                    for workspace in (secondary_cargo_workspaces or [])
+                ],
+            ]
+        )
 
     def cargo(
         self,
@@ -453,13 +461,14 @@ class CargoBuild(CargoPreImage):
         deps = set()
 
         for bin in self.bins:
-            crate = self.rd.cargo_workspace.crate_for_bin(bin)
-            deps |= self.rd.cargo_workspace.transitive_path_dependencies(crate)
+            crate = self.rd.cargo_workspaces[0].crate_for_bin(bin)
+            deps |= self.rd.cargo_workspaces.transitive_path_dependencies(crate)
 
         for example in self.examples:
-            crate = self.rd.cargo_workspace.crate_for_example(example)
-            deps |= self.rd.cargo_workspace.transitive_path_dependencies(
-                crate, dev=True
+            crate = self.rd.cargo_workspaces[0].crate_for_example(example)
+            deps |= self.rd.cargo_workspaces.transitive_path_dependencies(
+                crate,
+                dev=True,
             )
 
         return super().inputs() | set(inp for dep in deps for inp in dep.inputs())
@@ -562,7 +571,11 @@ class ResolvedImage:
             each of the images that `image` depends upon.
     """
 
-    def __init__(self, image: Image, dependencies: Iterable["ResolvedImage"]):
+    def __init__(
+        self,
+        image: Image,
+        dependencies: Iterable["ResolvedImage"],
+    ):
         self.image = image
         self.acquired = False
         self.dependencies = {}
@@ -847,13 +860,8 @@ class DependencySet:
         ui.header("Pushing images")
         pushes: list[subprocess.Popen] = []
         for image in images_to_push:
-            # Piping through `cat` disables terminal control codes, and so the
-            # interleaved progress output from multiple pushes is less hectic.
-            # We don't use `docker push --quiet`, as that disables progress
-            # output entirely.
             push = subprocess.Popen(
-                f"docker push {shlex.quote(image)} | cat",
-                shell=True,
+                ["docker", "push", image],
             )
             pushes.append(push)
 
@@ -915,7 +923,8 @@ class Repository:
         self.compositions: dict[str, Path] = {}
         for path, dirs, files in os.walk(self.root, topdown=True):
             if path == str(root / "misc"):
-                dirs.remove("python")
+                if "python" in dirs:
+                    dirs.remove("python")
             # Filter out some particularly massive ignored directories to keep
             # things snappy. Not required for correctness.
             dirs[:] = set(dirs) - {
@@ -927,6 +936,7 @@ class Repository:
                 "mzdata",
                 "node_modules",
                 "venv",
+                "vendor",
             }
             if "mzbuild.yml" in files:
                 image = Image(self.rd, Path(path))
@@ -1065,7 +1075,9 @@ class Repository:
 
 
 def publish_multiarch_images(
-    tag: str, dependency_sets: Iterable[Iterable[ResolvedImage]]
+    docker_registry: str,
+    tag: str,
+    dependency_sets: Iterable[Iterable[ResolvedImage]],
 ) -> None:
     """Publishes a set of docker images under a given tag."""
     for images in zip(*dependency_sets):

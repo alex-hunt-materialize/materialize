@@ -10,6 +10,7 @@
 """Git utilities."""
 
 import functools
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -74,18 +75,54 @@ def expand_globs(root: Path, *specs: Path | str) -> set[str]:
         "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git hash-object -t tree /dev/null
     )
     diff_files = spawn.capture(
-        ["git", "diff", "--name-only", "-z", "--relative", empty_tree, "--", *specs],
+        [
+            "git",
+            "diff",
+            "--submodule=diff",
+            "--name-only",
+            "-z",
+            "--relative",
+            empty_tree,
+            "--",
+            *specs,
+        ],
         cwd=root,
     )
 
     # `git ls-files --others --exclude-standard` surfaces any non-ignored,
     # untracked files, which are not included in the `git diff` output above.
     ls_files = spawn.capture(
-        ["git", "ls-files", "--others", "--exclude-standard", "-z", "--", *specs],
+        [
+            "git",
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            *specs,
+        ],
+        cwd=root,
+    )
+    # --recurse-submodules is incompatible with --others,
+    # so we have to call this separately
+    ls_files_recurse = spawn.capture(
+        [
+            "git",
+            "ls-files",
+            "--recurse-submodules",
+            "--exclude-standard",
+            "-z",
+            "--",
+            *specs,
+        ],
         cwd=root,
     )
 
-    return set(f for f in (diff_files + ls_files).split("\0") if f.strip() != "")
+    return set(
+        f
+        for f in (diff_files + ls_files + ls_files_recurse).split("\0")
+        if f.strip() != "" and not (os.path.isdir(f) and os.path.islink(f))
+    )
 
 
 def get_version_tags(
