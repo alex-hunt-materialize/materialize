@@ -124,8 +124,8 @@ class Composition:
             raise UnknownCompositionError(name)
 
         self.compose: dict[str, Any] = {
-            "version": "3.7",
             "services": {},
+            "networks": {},
         }
 
         # Load the mzcompose.py file, if one exists
@@ -152,6 +152,8 @@ class Composition:
                 if name in self.compose["services"]:
                     raise UIError(f"service {name!r} specified more than once")
                 self.compose["services"][name] = python_service.config
+            for network_name, network_config in getattr(module, "NETWORKS", {}).items():
+                self.compose["networks"][network_name] = network_config
 
         # Add default volumes
         self.compose.setdefault("volumes", {}).update(
@@ -233,7 +235,7 @@ class Composition:
                     # Raise an error for host-bound ports, unless
                     # `allow_host_ports` is `True`
                     raise UIError(
-                        "programming error: disallowed host port in service {name!r}",
+                        f"programming error: disallowed host port in service {name!r}",
                         hint='Add `"allow_host_ports": True` to the service config to disable this check.',
                     )
 
@@ -897,7 +899,7 @@ class Composition:
             AND {exclusion_clause}
             """
         )
-        for (name, status, error, details) in results:
+        for name, status, error, details in results:
             return f"Source {name} is expected to be running/created, but is {status}, error: {error}, details: {details}"
 
         results = self.sql_query(
@@ -908,7 +910,7 @@ class Composition:
             AND {exclusion_clause}
             """
         )
-        for (name, status, error, details) in results:
+        for name, status, error, details in results:
             return f"Sink {name} is expected to be running/dropped, but is {status}, error: {error}, details: {details}"
 
         results = self.sql_query(
@@ -921,7 +923,7 @@ class Composition:
             WHERE status NOT IN ('ready', 'not-ready')
             """
         )
-        for (cluster_name, replica_name, status, reason) in results:
+        for cluster_name, replica_name, status, reason in results:
             return f"Cluster replica {cluster_name}.{replica_name} is expected to be ready/not-ready, but is {status}, reason: {reason}"
 
         return None

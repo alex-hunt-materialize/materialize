@@ -52,6 +52,11 @@ class ServiceDependency(TypedDict, total=False):
     """Condition under which a dependency is considered satisfied."""
 
 
+class NetworkConfig(TypedDict, total=False):
+    aliases: list[str]
+    external: bool
+
+
 class ServiceConfig(TypedDict, total=False):
     """The definition of a service in Docker Compose.
 
@@ -134,10 +139,8 @@ class ServiceConfig(TypedDict, total=False):
     volumes: list[str]
     """Volumes to attach to the service."""
 
-    networks: dict[str, dict[str, list[str] | bool]]
+    networks: dict[str, NetworkConfig]
     """Additional networks to join.
-
-    TODO(benesch): this should use a nested TypedDict.
     """
 
     deploy: dict[str, dict[str, dict[str, str]]]
