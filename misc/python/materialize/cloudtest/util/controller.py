@@ -123,14 +123,12 @@ def launch_controllers(controller_names: list[str], docker_env: dict[str, str]) 
     try:
         subprocess.run(
             [
-                "bin/compose",
-                "up",
-                "--wait",
-                *controller_names,
+                "./mzcompose",
+                "run",
+                "default",
             ],
-            capture_output=True,
+            cwd="compose/api_tests",
             check=True,
-            env=docker_env,
         )
     except subprocess.CalledProcessError as e:
         log_subprocess_error(e)
@@ -146,10 +144,13 @@ def wait_for_controllers(*endpoints: Endpoint) -> None:
 def cleanup_controllers(docker_env: dict[str, str]) -> None:
     try:
         subprocess.run(
-            ["bin/compose", "down", "-v"],
-            capture_output=True,
+            [
+                "./mzcompose",
+                "down",
+                "-v",
+            ],
+            cwd="compose/api_tests",
             check=True,
-            env=docker_env,
         )
     except subprocess.CalledProcessError as e:
         log_subprocess_error(e)
