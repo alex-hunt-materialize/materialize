@@ -46,4 +46,4 @@ spec:
         - "--cockroach-password={{ .Values.metadatadb.password }}"
         - "--cockroach-ca-cert={{ .Values.metadatadb.caCert | replace "\n" "\\n" }}"
         resources:
-          {{- toYaml .Values.operator.resources | nindent 12 }}
+          {{- toYaml .Values.operator.resources | nindent 10 }}
