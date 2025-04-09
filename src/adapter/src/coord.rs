@@ -1035,6 +1035,8 @@ pub struct Config {
 
     pub helm_chart_version: Option<String>,
     pub license_key: ValidatedLicenseKey,
+    // TODO make this a sensitive value somehow.
+    pub external_login_password_mz_system: Option<String>,
 }
 
 /// Soft-state metadata about a compute replica
@@ -3930,6 +3932,7 @@ pub fn serve(
         caught_up_trigger: clusters_caught_up_trigger,
         helm_chart_version,
         license_key,
+        external_login_password_mz_system,
     }: Config,
 ) -> BoxFuture<'static, Result<(Handle, Client), AdapterError>> {
     async move {
@@ -4077,6 +4080,7 @@ pub fn serve(
                 enable_expression_cache_override: None,
                 enable_0dt_deployment,
                 helm_chart_version,
+                external_login_password_mz_system,
             },
         })
         .await?;

@@ -160,6 +160,30 @@ pub struct Args {
         action = ArgAction::Set,
     )]
     internal_http_listen_addr: SocketAddr,
+    /// Whether to listen on the unauthenticated internal HTTP and SQL ports.
+    #[clap(
+        long,
+        env = "ENABLE_INTERNAL_PORTS",
+        default_value = "true",
+        action = ArgAction::Set,
+    )]
+    enable_internal_ports: bool,
+    /// Password for the mz_system user.
+    #[clap(
+        long,
+        env = "EXTERNAL_LOGIN_PASSWORD_MZ_SYSTEM",
+        action = ArgAction::Set,
+    )]
+    // TODO make this a sensitive string somehow?
+    external_login_password_mz_system: Option<String>,
+    /// Whether to allow reserved users (ie: mz_system) on the external port.
+    #[clap(
+        long,
+        env = "ALLOW_RESERVED_ROLES_ON_EXTERNAL_PORTS",
+        default_value = "false",
+        action = ArgAction::Set,
+    )]
+    allow_reserved_roles_on_external_ports: bool,
     /// The address on which to listen for Persist PubSub connections.
     ///
     /// Connections to this address are not subject to encryption, authentication,
@@ -1095,6 +1119,9 @@ fn run(mut args: Args) -> Result<(), anyhow::Error> {
                 // Connection options.
                 tls,
                 tls_reload_certs: mz_server_core::default_cert_reload_ticker(),
+                enable_internal_ports: args.enable_internal_ports,
+                external_login_password_mz_system: args.external_login_password_mz_system,
+                allow_reserved_roles_on_external_ports: args.allow_reserved_roles_on_external_ports,
                 frontegg,
                 cors_allowed_origin,
                 egress_addresses: args.announce_egress_address,

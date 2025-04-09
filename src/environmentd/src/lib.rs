@@ -90,6 +90,13 @@ pub struct Config {
     /// Trigger to attempt to reload TLS certififcates.
     #[derivative(Debug = "ignore")]
     pub tls_reload_certs: ReloadTrigger,
+    /// Whether to listen on internal HTTP and SQL ports.
+    pub enable_internal_ports: bool,
+    // TODO make this a sensitive value somehow.
+    /// Password of the mz_system user.
+    pub external_login_password_mz_system: Option<String>,
+    /// Whether to allow reserved users (ie: mz_system) on the external port.
+    pub allow_reserved_roles_on_external_ports: bool,
     /// Frontegg JWT authentication configuration.
     pub frontegg: Option<FronteggAuthentication>,
     /// Origins for which cross-origin resource sharing (CORS) for HTTP requests
@@ -710,6 +717,7 @@ impl Listeners {
             caught_up_trigger,
             helm_chart_version: config.helm_chart_version.clone(),
             license_key: config.license_key,
+            external_login_password_mz_system: config.external_login_password_mz_system,
         })
         .instrument(info_span!("adapter::serve"))
         .await?;
@@ -740,6 +748,8 @@ impl Listeners {
                 internal: false,
                 active_connection_counter: active_connection_counter.clone(),
                 helm_chart_version: config.helm_chart_version.clone(),
+                allow_reserved_roles_on_external_ports: config
+                    .allow_reserved_roles_on_external_ports,
             });
             mz_server_core::serve(ServeConfig {
                 conns: sql_conns,
@@ -771,6 +781,8 @@ impl Listeners {
                 internal: true,
                 active_connection_counter: active_connection_counter.clone(),
                 helm_chart_version: config.helm_chart_version.clone(),
+                allow_reserved_roles_on_external_ports: config
+                    .allow_reserved_roles_on_external_ports,
             });
             mz_server_core::serve(ServeConfig {
                 conns: internal_sql_conns,

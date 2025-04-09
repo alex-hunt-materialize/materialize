@@ -96,6 +96,7 @@ pub struct StateConfig {
     pub enable_0dt_deployment: bool,
     /// Helm chart version
     pub helm_chart_version: Option<String>,
+    pub external_login_password_mz_system: Option<String>,
 }
 
 #[derive(Debug)]
