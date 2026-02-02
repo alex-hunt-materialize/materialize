@@ -6041,6 +6041,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2",
  "tracing",
  "uuid",
  "workspace-hack",

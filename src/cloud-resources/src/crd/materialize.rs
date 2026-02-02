@@ -28,8 +28,11 @@ use mz_server_core::listeners::AuthenticatorKind;
 
 pub const LAST_KNOWN_ACTIVE_GENERATION_ANNOTATION: &str =
     "materialize.cloud/last-known-active-generation";
+pub const FORCE_ROLLOUT_ANNOTATION: &str = "materialize.cloud/force-rollout";
 
 pub mod v1alpha1 {
+    use sha2::{Digest, Sha256};
+
     use super::*;
 
     #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
@@ -150,39 +153,16 @@ pub mod v1alpha1 {
         /// Labels to apply to the pods.
         pub pod_labels: Option<BTreeMap<String, String>>,
 
-        /// When changes are made to the environmentd resources (either via
-        /// modifying fields in the spec here or by deploying a new
-        /// orchestratord version which changes how resources are generated),
-        /// existing environmentd processes won't be automatically restarted.
-        /// In order to trigger a restart, the request_rollout field should be
-        /// set to a new (random) value. Once the rollout completes, the value
-        /// of `status.lastCompletedRolloutRequest` will be set to this value
-        /// to indicate completion.
-        ///
-        /// Defaults to a random value in order to ensure that the first
-        /// generation rollout is automatically triggered.
-        #[serde(default)]
-        pub request_rollout: Uuid,
-        /// If `forcePromote` is set to the same value as `requestRollout`, the
+        /// If `forcePromote` is set to the same value as the `status.requestedRolloutHash`,
         /// current rollout will skip waiting for clusters in the new
         /// generation to rehydrate before promoting the new environmentd to
         /// leader.
-        #[serde(default)]
-        pub force_promote: Uuid,
-        /// This value will be written to an annotation in the generated
-        /// environmentd statefulset, in order to force the controller to
-        /// detect the generated resources as changed even if no other changes
-        /// happened. This can be used to force a rollout to a new generation
-        /// even without making any meaningful changes, by setting it to the
-        /// same value as `requestRollout`.
+        pub force_promote: Option<String>,
+        /// This value will force the controller to detect the spec as changed
+        /// even if no other changes happened. This can be used to force a rollout
+        /// to a new generation even without making any meaningful changes.
         #[serde(default)]
         pub force_rollout: Uuid,
-        /// {{<warning>}}
-        /// Deprecated and ignored. Use `rolloutStrategy` instead.
-        /// {{</warning>}}
-        #[kube(deprecated)]
-        #[serde(default)]
-        pub in_place_rollout: bool,
         /// Rollout strategy to use when upgrading this Materialize instance.
         #[serde(default)]
         pub rollout_strategy: MaterializeRolloutStrategy,
@@ -239,6 +219,60 @@ pub mod v1alpha1 {
     }
 
     impl Materialize {
+        pub fn generate_spec_hash(&self) -> String {
+            let mut hasher = Sha256::new();
+            // Remove fields that don't affect the resources generated per generation,
+            // and we don't want to trigger a rollout from.
+            let spec = MaterializeSpec {
+                environmentd_image_ref: self.spec.environmentd_image_ref.clone(),
+                environmentd_extra_args: self.spec.environmentd_extra_args.clone(),
+                environmentd_extra_env: self.spec.environmentd_extra_env.clone(),
+                environmentd_iam_role_arn: self.spec.environmentd_iam_role_arn.clone(),
+                environmentd_connection_role_arn: self
+                    .spec
+                    .environmentd_connection_role_arn
+                    .clone(),
+                environmentd_resource_requirements: self
+                    .spec
+                    .environmentd_resource_requirements
+                    .clone(),
+                environmentd_scratch_volume_storage_requirement: self
+                    .spec
+                    .environmentd_scratch_volume_storage_requirement
+                    .clone(),
+                balancerd_resource_requirements: None,
+                console_resource_requirements: None,
+                balancerd_replicas: None,
+                console_replicas: None,
+                service_account_name: self.spec.service_account_name.clone(),
+                service_account_annotations: self.spec.service_account_annotations.clone(),
+                service_account_labels: self.spec.service_account_labels.clone(),
+                pod_annotations: self.spec.pod_annotations.clone(),
+                pod_labels: self.spec.pod_labels.clone(),
+                force_promote: None,
+                force_rollout: self.spec.force_rollout,
+                rollout_strategy: self.spec.rollout_strategy.clone(),
+                backend_secret_name: self.spec.backend_secret_name.clone(),
+                authenticator_kind: self.spec.authenticator_kind,
+                enable_rbac: self.spec.enable_rbac,
+                environment_id: self.spec.environment_id,
+                system_parameter_configmap_name: self.spec.system_parameter_configmap_name.clone(),
+                balancerd_external_certificate_spec: None,
+                console_external_certificate_spec: None,
+                internal_certificate_spec: self.spec.internal_certificate_spec.clone(),
+            };
+            hasher.update(&serde_json::to_vec(&spec).unwrap());
+            if let Some(annotation) = self
+                .metadata
+                .annotations
+                .as_ref()
+                .and_then(|annotations| annotations.get(FORCE_ROLLOUT_ANNOTATION))
+            {
+                hasher.update(annotation);
+            }
+            format!("{:x}", hasher.finalize())
+        }
+
         pub fn backend_secret_name(&self) -> String {
             self.spec.backend_secret_name.clone()
         }
@@ -401,24 +435,24 @@ pub mod v1alpha1 {
             )
         }
 
-        pub fn requested_reconciliation_id(&self) -> Uuid {
-            self.spec.request_rollout
-        }
-
         pub fn rollout_requested(&self) -> bool {
-            self.requested_reconciliation_id()
-                != self
-                    .status
-                    .as_ref()
-                    .map_or_else(Uuid::nil, |status| status.last_completed_rollout_request)
+            self.status
+                .as_ref()
+                .map(|status| status.requested_rollout_hash.is_some())
+                .unwrap_or(false)
         }
 
         pub fn set_force_promote(&mut self) {
-            self.spec.force_promote = self.spec.request_rollout;
+            self.spec.force_promote = Some(self.generate_spec_hash());
         }
 
         pub fn should_force_promote(&self) -> bool {
-            self.spec.force_promote == self.spec.request_rollout
+            // TODO store current spec hash?
+            self.spec.force_promote.as_ref()
+                == self
+                    .status
+                    .as_ref()
+                    .and_then(|status| status.requested_rollout_hash.as_ref())
                 || self.spec.rollout_strategy
                     == MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime
         }
@@ -438,7 +472,7 @@ pub mod v1alpha1 {
             false
         }
 
-        pub fn is_ready_to_promote(&self, resources_hash: &str) -> bool {
+        pub fn is_ready_to_promote(&self, rollout_hash: &str) -> bool {
             let Some(status) = self.status.as_ref() else {
                 return false;
             };
@@ -449,7 +483,7 @@ pub mod v1alpha1 {
                 .conditions
                 .iter()
                 .any(|condition| condition.reason == "ReadyToPromote")
-                && &status.resources_hash == resources_hash
+                && status.requested_rollout_hash.as_deref() == Some(rollout_hash)
         }
 
         pub fn is_promoting(&self) -> bool {
@@ -605,17 +639,14 @@ pub mod v1alpha1 {
         pub resource_id: String,
         /// The generation of Materialize pods actively capable of servicing requests.
         pub active_generation: u64,
-        /// The UUID of the last successfully completed rollout.
-        pub last_completed_rollout_request: Uuid,
+        /// Hash of the last completed rollout's Materialize spec.
+        /// This is used to determine when the spec has changed and we need to rollout.
+        pub last_completed_rollout_spec_hash: Option<String>,
         /// The image ref of the environmentd image that was last successfully rolled out.
         /// Used to deny upgrades past 1 major version from the last successful rollout.
         /// When None, we upgrade anyways.
         pub last_completed_rollout_environmentd_image_ref: Option<String>,
-        /// A hash calculated from the spec of resources to be created based on this Materialize
-        /// spec. This is used for detecting when the existing resources are up to date.
-        /// If you want to trigger a rollout without making other changes that would cause this
-        /// hash to change, you must set forceRollout to the same UUID as requestRollout.
-        pub resources_hash: String,
+        pub requested_rollout_hash: Option<String>,
         pub conditions: Vec<Condition>,
     }
 
