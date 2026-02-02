@@ -2753,7 +2753,9 @@ def run(definition: dict[str, Any], expect_fail: bool) -> None:
                 stderr=subprocess.DEVNULL,
             )
         )["items"][0]
-        definition["materialize"]["spec"]["forcePromote"] = mz["spec"]["requestRollout"]
+        rollout_spec_hash = mz["status"]["requestedRolloutHash"]
+        assert rollout_spec_hash is not None
+        definition["materialize"]["spec"]["forcePromote"] = rollout_spec_hash
         try:
             spawn.runv(
                 ["kubectl", "apply", "-f", "-"],
@@ -2812,6 +2814,8 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
             status = data["items"][0].get("status")
             if not status:
                 continue
+            if "lastCompletedRolloutSpecHash" not in status:
+                continue
             if expect_fail:
                 break
             if (
@@ -2820,10 +2824,8 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
                 or status["conditions"][0]["status"] != "True"
             ):
                 continue
-            if (
-                status["lastCompletedRolloutRequest"]
-                == data["items"][0]["spec"]["requestRollout"]
-            ):
+            # TODO should I check somehow that this is the latest to handle upgrades?
+            if status["lastCompletedRolloutSpecHash"]:
                 break
         except subprocess.CalledProcessError:
             pass
