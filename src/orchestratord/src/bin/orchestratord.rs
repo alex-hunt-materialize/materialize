@@ -38,6 +38,7 @@ use mz_orchestratord::{
     k8s::register_crds,
     metrics::{self, Metrics},
     tls::DefaultCertificateSpecs,
+    webhook,
 };
 use mz_ore::{
     cli::{self, CliConfig, KeyValueArg},
@@ -58,6 +59,15 @@ pub struct Args {
     profiling_listen_address: SocketAddr,
     #[clap(long, default_value = "[::]:3100")]
     metrics_listen_address: SocketAddr,
+    #[clap(long, default_value = "[::]:8001")]
+    webhook_listen_address: SocketAddr,
+
+    #[clap(long)]
+    webhook_service_name: String,
+    #[clap(long)]
+    webhook_service_namespace: String,
+    #[clap(long, default_value = "8001")]
+    webhook_service_port: u16,
 
     #[clap(long)]
     cloud_provider: CloudProvider,
@@ -267,6 +277,9 @@ async fn run(args: Args) -> Result<(), anyhow::Error> {
     register_crds(
         client.clone(),
         args.additional_crd_columns.unwrap_or_default(),
+        args.webhook_service_name,
+        args.webhook_service_namespace,
+        args.webhook_service_port,
     )
     .await?;
 
@@ -299,6 +312,21 @@ async fn run(args: Args) -> Result<(), anyhow::Error> {
             .await
             {
                 panic!("metrics server failed: {}", e.display_with_causes());
+            }
+        });
+    }
+
+    {
+        let router = webhook::router();
+        let address = args.webhook_listen_address.clone();
+        mz_ore::task::spawn(|| "webhook server", async move {
+            if let Err(e) = axum::serve(
+                tokio::net::TcpListener::bind(&address).await.unwrap(),
+                router.into_make_service(),
+            )
+            .await
+            {
+                panic!("webhook server failed: {}", e.display_with_causes());
             }
         });
     }

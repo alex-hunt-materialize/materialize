@@ -41,7 +41,7 @@ use mz_cloud_resources::crd::{
     ManagedResource,
     balancer::v1alpha1::{Balancer, BalancerSpec},
     console::v1alpha1::{BalancerdRef, Console, ConsoleSpec, HttpConnectionScheme},
-    materialize::v1alpha1::{Materialize, MaterializeRolloutStrategy, MaterializeStatus},
+    materialize::v1alpha2::{Materialize, MaterializeRolloutStrategy, MaterializeStatus},
 };
 use mz_license_keys::validate;
 use mz_orchestrator_kubernetes::KubernetesImagePullPolicy;
