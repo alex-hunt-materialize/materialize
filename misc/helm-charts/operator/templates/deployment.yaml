@@ -240,9 +240,15 @@ spec:
         - >
           --additional-crd-columns={{ toJson .Values.operator.additionalMaterializeCRDColumns }}
         {{- end }}
+        - "--webhook-service-name"
+        - {{ include "materialize-operator.fullname" . }}
+        - "--webhook-service-namespace"
+        - {{ .Release.Namespace }}
         ports:
         - containerPort: 3100
           name: metrics
+        - containerPort: 8001
+          name: webhook
         resources:
           {{- toYaml .Values.operator.resources | nindent 10 }}
         securityContext:
