@@ -7179,7 +7179,6 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
- "base64 0.22.1",
  "clap",
  "futures",
  "http 1.4.0",

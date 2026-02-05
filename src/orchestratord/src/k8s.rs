@@ -9,7 +9,6 @@
 
 use std::{future::ready, time::Duration};
 
-use base64::Engine;
 use futures::StreamExt;
 use k8s_openapi::{
     ByteString,
@@ -110,7 +109,6 @@ pub async fn register_crds(
     ca_cert_path: String,
 ) -> Result<(), anyhow::Error> {
     let ca_bytes = tokio::fs::read(ca_cert_path).await?;
-    let base64_ca_bytes = base64::engine::general_purpose::STANDARD.encode(ca_bytes);
     let mut mz_crd = crd::materialize::v1alpha2::Materialize::crd();
     let default_columns = mz_crd.spec.versions[0]
         .additional_printer_columns
@@ -126,7 +124,7 @@ pub async fn register_crds(
         strategy: "Webhook".to_owned(),
         webhook: Some(WebhookConversion {
             client_config: Some(WebhookClientConfig {
-                ca_bundle: Some(ByteString(base64_ca_bytes.into_bytes())),
+                ca_bundle: Some(ByteString(ca_bytes)),
                 service: Some(ServiceReference {
                     name: webhook_service_name,
                     namespace: webhook_service_namespace,

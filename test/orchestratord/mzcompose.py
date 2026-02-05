@@ -2875,7 +2875,7 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
                         stderr=subprocess.DEVNULL,
                     )
                     if (
-                        f"ERROR k8s_controller::controller: Materialize reconciliation error. err=reconciler for object Materialize.v1alpha1.materialize.cloud/{definition['materialize']['metadata']['name']}.materialize-environment failed"
+                        f"ERROR k8s_controller::controller: Materialize reconciliation error. err=reconciler for object Materialize.v1alpha2.materialize.cloud/{definition['materialize']['metadata']['name']}.materialize-environment failed"
                         in logs
                     ):
                         break

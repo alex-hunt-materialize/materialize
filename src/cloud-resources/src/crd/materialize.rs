@@ -260,6 +260,75 @@ pub mod v1alpha1 {
         pub resources_hash: String,
         pub conditions: Vec<Condition>,
     }
+
+    impl From<v1alpha2::Materialize> for Materialize {
+        fn from(value: v1alpha2::Materialize) -> Self {
+            Materialize {
+                metadata: value.metadata,
+                spec: MaterializeSpec {
+                    environmentd_image_ref: value.spec.environmentd_image_ref,
+                    environmentd_extra_args: value.spec.environmentd_extra_args,
+                    environmentd_extra_env: value.spec.environmentd_extra_env,
+                    environmentd_iam_role_arn: value.spec.environmentd_iam_role_arn,
+                    environmentd_connection_role_arn: value.spec.environmentd_connection_role_arn,
+                    environmentd_resource_requirements: value
+                        .spec
+                        .environmentd_resource_requirements,
+                    environmentd_scratch_volume_storage_requirement: value
+                        .spec
+                        .environmentd_scratch_volume_storage_requirement,
+                    balancerd_resource_requirements: value.spec.balancerd_resource_requirements,
+                    console_resource_requirements: value.spec.console_resource_requirements,
+                    balancerd_replicas: value.spec.balancerd_replicas,
+                    console_replicas: value.spec.console_replicas,
+                    service_account_name: value.spec.service_account_name,
+                    service_account_annotations: value.spec.service_account_annotations,
+                    service_account_labels: value.spec.service_account_labels,
+                    pod_annotations: value.spec.pod_annotations,
+                    pod_labels: value.spec.pod_labels,
+                    force_promote: match value.spec.force_promote {
+                        Some(s) => Uuid::try_from(s).unwrap_or(Uuid::nil()),
+                        None => Uuid::nil(),
+                    },
+                    force_rollout: value.spec.force_rollout,
+                    // TODO either pull this out so they are the same type,
+                    // or add a timeout to the ManuallyPromote variant.
+                    rollout_strategy: match value.spec.rollout_strategy {
+                        v1alpha2::MaterializeRolloutStrategy::WaitUntilReady => {
+                            MaterializeRolloutStrategy::WaitUntilReady
+                        }
+                        v1alpha2::MaterializeRolloutStrategy::ManuallyPromote => {
+                            MaterializeRolloutStrategy::ManuallyPromote
+                        }
+                        v1alpha2::MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime => {
+                            MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime
+                        }
+                    },
+                    backend_secret_name: value.spec.backend_secret_name,
+                    authenticator_kind: value.spec.authenticator_kind,
+                    enable_rbac: value.spec.enable_rbac,
+                    environment_id: value.spec.environment_id,
+                    system_parameter_configmap_name: value.spec.system_parameter_configmap_name,
+                    balancerd_external_certificate_spec: value
+                        .spec
+                        .balancerd_external_certificate_spec,
+                    console_external_certificate_spec: value.spec.console_external_certificate_spec,
+                    internal_certificate_spec: value.spec.internal_certificate_spec,
+                    request_rollout: Uuid::nil(),
+                    in_place_rollout: false,
+                },
+                status: value.status.map(|status| MaterializeStatus {
+                    resource_id: status.resource_id,
+                    active_generation: status.active_generation,
+                    last_completed_rollout_environmentd_image_ref: status
+                        .last_completed_rollout_environmentd_image_ref,
+                    conditions: status.conditions,
+                    last_completed_rollout_request: Uuid::nil(),
+                    resources_hash: "".to_owned(),
+                }),
+            }
+        }
+    }
 }
 
 pub mod v1alpha2 {
@@ -996,7 +1065,7 @@ mod tests {
     use kube::core::ObjectMeta;
     use semver::Version;
 
-    use super::v1alpha1::{Materialize, MaterializeSpec};
+    use super::v1alpha2::{Materialize, MaterializeSpec};
 
     #[mz_ore::test]
     fn meets_minimum_version() {
@@ -1045,7 +1114,7 @@ mod tests {
 
     #[mz_ore::test]
     fn within_upgrade_window() {
-        use super::v1alpha1::MaterializeStatus;
+        use super::v1alpha2::MaterializeStatus;
 
         let mut mz = Materialize {
             spec: MaterializeSpec {
