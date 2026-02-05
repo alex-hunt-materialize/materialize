@@ -34,6 +34,10 @@ operator:
     #  priority: 2
     #  type: "string"
 
+  certificate:
+    # TODO flesh out this optionality
+    certManager: true
+
   # Cloud provider configuration
   cloudProvider:
     # -- Specifies cloud provider. Valid values are 'aws', 'gcp', 'azure' , 'generic', or 'local'

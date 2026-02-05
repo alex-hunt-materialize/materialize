@@ -1602,6 +1602,21 @@ def workflow_documentation_defaults(
                 "args={--kubelet-insecure-tls,--kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP}",
             ]
         )
+        spawn.runv(
+            [
+                "helm",
+                "install",
+                "cert-manager",
+                "oci://quay.io/jetstack/charts/cert-manager",
+                "--version",
+                "v1.19.2",
+                "--namespace",
+                "cert-manager",
+                "--create-namespace",
+                "--set",
+                "crds.enabled=true",
+            ]
+        )
 
         wait_for_crd_established()
 
@@ -2381,6 +2396,21 @@ def setup(c: Composition, args) -> dict[str, Any]:
                 "kube-system",
                 "--set",
                 "args={--kubelet-insecure-tls,--kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP}",
+            ]
+        )
+        spawn.runv(
+            [
+                "helm",
+                "install",
+                "cert-manager",
+                "oci://quay.io/jetstack/charts/cert-manager",
+                "--version",
+                "v1.19.2",
+                "--namespace",
+                "cert-manager",
+                "--create-namespace",
+                "--set",
+                "crds.enabled=true",
             ]
         )
 
