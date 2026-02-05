@@ -13,6 +13,7 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
+use axum_server::tls_openssl::OpenSSLConfig;
 use http::HeaderValue;
 use k8s_openapi::{
     api::{
@@ -68,6 +69,12 @@ pub struct Args {
     webhook_service_namespace: String,
     #[clap(long, default_value = "8001")]
     webhook_service_port: u16,
+    #[clap(long, default_value = "/etc/tls/ca.crt")]
+    tls_ca: String,
+    #[clap(long, default_value = "/etc/tls/tls.crt")]
+    tls_cert: String,
+    #[clap(long, default_value = "/etc/tls/tls.key")]
+    tls_key: String,
 
     #[clap(long)]
     cloud_provider: CloudProvider,
@@ -273,6 +280,18 @@ async fn run(args: Args) -> Result<(), anyhow::Error> {
 
     let metrics = Arc::new(Metrics::register_into(&metrics_registry));
 
+    {
+        mz_ore::task::spawn(|| "webhook server", async move {
+            let config = OpenSSLConfig::from_pem_file(args.tls_cert, args.tls_key).unwrap();
+            if let Err(e) = axum_server::bind_openssl(args.webhook_listen_address, config)
+                .serve(webhook::router().into_make_service())
+                .await
+            {
+                panic!("webhook server failed: {}", e.display_with_causes());
+            }
+        });
+    }
+
     let (client, namespace) = create_client(args.kubernetes_context.clone()).await?;
     register_crds(
         client.clone(),
@@ -280,6 +299,7 @@ async fn run(args: Args) -> Result<(), anyhow::Error> {
         args.webhook_service_name,
         args.webhook_service_namespace,
         args.webhook_service_port,
+        args.tls_ca,
     )
     .await?;
 
@@ -312,21 +332,6 @@ async fn run(args: Args) -> Result<(), anyhow::Error> {
             .await
             {
                 panic!("metrics server failed: {}", e.display_with_causes());
-            }
-        });
-    }
-
-    {
-        let router = webhook::router();
-        let address = args.webhook_listen_address.clone();
-        mz_ore::task::spawn(|| "webhook server", async move {
-            if let Err(e) = axum::serve(
-                tokio::net::TcpListener::bind(&address).await.unwrap(),
-                router.into_make_service(),
-            )
-            .await
-            {
-                panic!("webhook server failed: {}", e.display_with_causes());
             }
         });
     }

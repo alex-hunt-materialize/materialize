@@ -9,10 +9,14 @@
 
 use std::{future::ready, time::Duration};
 
+use base64::Engine;
 use futures::StreamExt;
-use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::{
-    CustomResourceColumnDefinition, CustomResourceConversion, ServiceReference,
-    WebhookClientConfig, WebhookConversion,
+use k8s_openapi::{
+    ByteString,
+    apiextensions_apiserver::pkg::apis::apiextensions::v1::{
+        CustomResourceColumnDefinition, CustomResourceConversion, ServiceReference,
+        WebhookClientConfig, WebhookConversion,
+    },
 };
 use kube::{
     Api, Client, CustomResourceExt, Resource, ResourceExt,
@@ -103,7 +107,10 @@ pub async fn register_crds(
     webhook_service_name: String,
     webhook_service_namespace: String,
     webhook_service_port: u16,
+    ca_cert_path: String,
 ) -> Result<(), anyhow::Error> {
+    let ca_bytes = tokio::fs::read(ca_cert_path).await?;
+    let base64_ca_bytes = base64::engine::general_purpose::STANDARD.encode(ca_bytes);
     let mut mz_crd = crd::materialize::v1alpha2::Materialize::crd();
     let default_columns = mz_crd.spec.versions[0]
         .additional_printer_columns
@@ -119,7 +126,7 @@ pub async fn register_crds(
         strategy: "Webhook".to_owned(),
         webhook: Some(WebhookConversion {
             client_config: Some(WebhookClientConfig {
-                ca_bundle: None,
+                ca_bundle: Some(ByteString(base64_ca_bytes.into_bytes())),
                 service: Some(ServiceReference {
                     name: webhook_service_name,
                     namespace: webhook_service_namespace,

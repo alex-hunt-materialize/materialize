@@ -260,3 +260,13 @@ spec:
           runAsNonRoot: true
           seccompProfile:
             type: RuntimeDefault
+        volumeMounts:
+          - mountPath: /etc/tls
+            name: certificate
+            readOnly: true
+      volumes:
+        - name: certificate
+          secret:
+            defaultMode: 256
+            optional: false
+            secretName: {{ include "materialize-operator.fullname" . }}-cert
