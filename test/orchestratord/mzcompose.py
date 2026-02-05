@@ -1636,20 +1636,28 @@ def workflow_documentation_defaults(
         )
         for i in range(120):
             try:
-                spawn.capture(
-                    [
-                        "kubectl",
-                        "get",
-                        "crd",
-                        "materializes.materialize.cloud",
-                        "-n",
-                        "materialize",
-                        "-o",
-                        "name",
-                    ],
-                    stderr=subprocess.DEVNULL,
+                crd = json.loads(
+                    spawn.capture(
+                        [
+                            "kubectl",
+                            "get",
+                            "crd",
+                            "materializes.materialize.cloud",
+                            "-n",
+                            "materialize",
+                            "-o",
+                            "json",
+                        ],
+                        stderr=subprocess.DEVNULL,
+                    )
                 )
-                break
+                if "status" in crd and "conditions" in crd["status"]:
+                    for condition in crd["status"]["conditions"]:
+                        if (
+                            condition["type"] == "Established"
+                            and condition["status"] == "True"
+                        ):
+                            break
 
             except subprocess.CalledProcessError:
                 pass
@@ -2907,7 +2915,7 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
                         stderr=subprocess.DEVNULL,
                     )
                     if (
-                        f"ERROR k8s_controller::controller: Materialize reconciliation error. err=reconciler for object Materialize.v1alpha1.materialize.cloud/{definition['materialize']['metadata']['name']}.materialize-environment failed"
+                        f"ERROR k8s_controller::controller: Materialize reconciliation error. err=reconciler for object Materialize.v1alpha2.materialize.cloud/{definition['materialize']['metadata']['name']}.materialize-environment failed"
                         in logs
                     ):
                         break

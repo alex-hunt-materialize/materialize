@@ -27,13 +27,13 @@ metadata:
   labels:
     {{- include "materialize-operator.labels" . | nindent 4 }}
 spec:
-  commonName: {{ include "materialize-operator.fullname" . }}
+  dnsNames:
+    - {{ include "materialize-operator.fullname" . }}.{{ .Release.Namespace }}.svc
   secretName: {{ include "materialize-operator.fullname" . }}-cert
   privateKey:
     algorithm: Ed25519
     rotationPolicy: Always
   issuerRef:
     name: {{ include "materialize-operator.fullname" . }}-self-signed
-    namespace: {{ .Release.Namespace }}
     kind: Issuer
     group: cert-manager.io
