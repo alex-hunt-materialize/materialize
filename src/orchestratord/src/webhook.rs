@@ -7,7 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0.
 
-use axum::routing::get;
+use anyhow::anyhow;
+use axum::routing::post;
 use axum::{Json, Router};
 use http::StatusCode;
 use kube::core::Status;
@@ -15,46 +16,89 @@ use kube::core::conversion::{ConversionRequest, ConversionResponse, ConversionRe
 use kube::core::response::reason;
 
 use mz_cloud_resources::crd::materialize::{v1alpha1, v1alpha2};
+use tracing::warn;
 
 pub fn router() -> Router {
-    Router::new().route("/convert", get(get_convert))
+    Router::new().route("/convert", post(post_convert))
 }
 
-fn invalid_response(message: &str) -> (StatusCode, Json<ConversionReview>) {
-    (
-        StatusCode::UNPROCESSABLE_ENTITY,
-        Json(ConversionResponse::invalid(Status::failure(message, reason::INVALID)).into_review()),
-    )
+#[derive(Clone, Copy)]
+enum SupportedVersion {
+    V1alpha1,
+    V1alpha2,
 }
 
-async fn get_convert(
+impl TryFrom<&str> for SupportedVersion {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "materialize.cloud/v1alpha1" => Ok(SupportedVersion::V1alpha1),
+            "materialize.cloud/v1alpha2" => Ok(SupportedVersion::V1alpha2),
+            _ => Err(anyhow!("unexpected version: {}", value)),
+        }
+    }
+}
+
+fn convert(
+    desired_version: SupportedVersion,
+    value: serde_json::Value,
+) -> Result<serde_json::Value, anyhow::Error> {
+    let from_version = SupportedVersion::try_from(
+        value
+            .get("apiVersion")
+            .and_then(|version| version.as_str())
+            .ok_or_else(|| anyhow!("missing version"))?,
+    )?;
+    match (from_version, desired_version) {
+        (SupportedVersion::V1alpha1, SupportedVersion::V1alpha1) => Ok(value),
+        (SupportedVersion::V1alpha1, SupportedVersion::V1alpha2) => serde_json::from_value::<
+            v1alpha1::Materialize,
+        >(value)
+        .and_then(|mz_v1alpha1| serde_json::to_value(v1alpha2::Materialize::from(mz_v1alpha1)))
+        .map_err(|e| e.into()),
+        (SupportedVersion::V1alpha2, SupportedVersion::V1alpha1) => serde_json::from_value::<
+            v1alpha2::Materialize,
+        >(value)
+        .and_then(|mz_v1alpha2| serde_json::to_value(v1alpha1::Materialize::from(mz_v1alpha2)))
+        .map_err(|e| e.into()),
+        (SupportedVersion::V1alpha2, SupportedVersion::V1alpha2) => Ok(value),
+    }
+}
+
+async fn post_convert(
     Json(conversion_review): Json<ConversionReview>,
 ) -> (StatusCode, Json<ConversionReview>) {
-    if &conversion_review.types.api_version != "materialize.cloud/v1alpha1" {
-        return invalid_response(&format!(
-            "expected api_version materialize.cloud/v1alpha1, but got {}",
-            conversion_review.types.api_version
-        ));
-    }
-    if &conversion_review.types.kind != "Materialize" {
-        return invalid_response(&format!(
-            "expected kind Materialize, but got {}",
-            conversion_review.types.kind
-        ));
-    }
     let Ok(request) = ConversionRequest::from_review(conversion_review) else {
-        return invalid_response("missing request");
+        warn!("missing request");
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(
+                ConversionResponse::invalid(Status::failure("missing request", reason::INVALID))
+                    .into_review(),
+            ),
+        );
     };
 
-    let converted_objects: Result<Vec<serde_json::Value>, serde_json::Error> = request
+    let desired_version = match SupportedVersion::try_from(request.desired_api_version.as_str()) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(
+                    ConversionResponse::for_request(request)
+                        .failure(Status::failure(&e.to_string(), reason::BAD_REQUEST))
+                        .into_review(),
+                ),
+            );
+        }
+    };
+
+    let converted_objects: Result<Vec<serde_json::Value>, anyhow::Error> = request
         .objects
         .iter()
         .cloned()
-        .map(|value| {
-            serde_json::from_value::<v1alpha1::Materialize>(value).and_then(|mz_v1alpha1| {
-                serde_json::to_value(v1alpha2::Materialize::from(mz_v1alpha1))
-            })
-        })
+        .map(|value| convert(desired_version, value))
         .collect();
     match converted_objects {
         Ok(converted_objects) => (
@@ -65,13 +109,16 @@ async fn get_convert(
                     .into_review(),
             ),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                ConversionResponse::for_request(request)
-                    .failure(Status::failure(&e.to_string(), reason::UNKNOWN))
-                    .into_review(),
-            ),
-        ),
+        Err(e) => {
+            warn!("error when converting: {:?}\n{:?}", &e, request.objects);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(
+                    ConversionResponse::for_request(request)
+                        .failure(Status::failure(&e.to_string(), reason::UNKNOWN))
+                        .into_review(),
+                ),
+            )
+        }
     }
 }
