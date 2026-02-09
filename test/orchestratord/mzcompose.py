@@ -2730,9 +2730,11 @@ def run(definition: dict[str, Any], expect_fail: bool) -> None:
     if "system_params_configmap" in definition:
         defs.append(definition["system_params_configmap"])
     try:
+        yaml_str = yaml.dump_all(defs)
+        print(f"Attempting to apply:\n{yaml_str}")
         spawn.runv(
             ["kubectl", "apply", "-f", "-"],
-            stdin=yaml.dump_all(defs).encode(),
+            stdin=yaml_str.encode(),
         )
     except subprocess.CalledProcessError as e:
         print(f"Failed to apply: {e.stdout}\nSTDERR:{e.stderr}")
