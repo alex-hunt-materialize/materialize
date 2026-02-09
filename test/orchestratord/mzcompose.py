@@ -2699,6 +2699,34 @@ def init(definition: dict[str, Any]) -> None:
     else:
         raise ValueError("Never completed")
 
+    # Wait for the webhook service endpoints to be populated.
+    # There is a race between a pod being marked Ready and the
+    # EndpointSlice controller / kube-proxy updating iptables rules,
+    # so the conversion webhook may not be reachable via the Service
+    # immediately after helm --wait returns.
+    for i in range(60):
+        try:
+            endpoints = spawn.capture(
+                [
+                    "kubectl",
+                    "get",
+                    "endpoints",
+                    "operator-materialize-operator",
+                    "-n",
+                    "materialize",
+                    "-o",
+                    "jsonpath={.subsets[0].addresses[0].ip}",
+                ],
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if endpoints:
+                break
+        except subprocess.CalledProcessError:
+            pass
+        time.sleep(1)
+    else:
+        raise ValueError("Webhook service endpoints never became available")
+
 
 def upgrade_operator_helm_chart(definition: dict[str, Any], expect_fail: bool) -> None:
     spawn.runv(
@@ -2729,16 +2757,31 @@ def run(definition: dict[str, Any], expect_fail: bool) -> None:
         defs.append(definition["materialize2"])
     if "system_params_configmap" in definition:
         defs.append(definition["system_params_configmap"])
-    try:
-        yaml_str = yaml.dump_all(defs)
-        print(f"Attempting to apply:\n{yaml_str}")
-        spawn.runv(
+    yaml_str = yaml.dump_all(defs)
+    print(f"Attempting to apply:\n{yaml_str}")
+    # Retry to handle transient webhook unavailability (e.g. endpoint
+    # propagation delay after pod restart during helm upgrade).
+    for attempt in range(30):
+        result = subprocess.run(
             ["kubectl", "apply", "-f", "-"],
-            stdin=yaml_str.encode(),
+            input=yaml_str.encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to apply: {e.stdout}\nSTDERR:{e.stderr}")
-        raise
+        if result.returncode == 0:
+            break
+        stderr_str = result.stderr.decode(errors="replace")
+        if attempt < 29 and "connection refused" in stderr_str:
+            print(f"Webhook not yet reachable (attempt {attempt + 1}), retrying...")
+            time.sleep(2)
+            continue
+        print(f"Failed to apply: {result.stdout}\nSTDERR:{result.stderr}")
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
 
     if definition["materialize"]["spec"].get("rolloutStrategy") == "ManuallyPromote":
         # First wait for it to become ready to promote, but not yet promoted
