@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0.
 
+{{- if eq .Values.operator.certificate.source "cert-manager" -}}
 ---
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -37,3 +38,4 @@ spec:
     name: {{ include "materialize-operator.fullname" . }}-self-signed
     kind: Issuer
     group: cert-manager.io
+{{- end -}}

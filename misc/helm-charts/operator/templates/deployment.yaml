@@ -283,4 +283,4 @@ spec:
           secret:
             defaultMode: 256
             optional: false
-            secretName: {{ include "materialize-operator.fullname" . }}-cert
+            secretName: {{ if eq .Values.operator.certificate.source "cert-manager" }}{{ include "materialize-operator.fullname" . }}-cert{{ else }}{{ .Values.operator.certificate.secretName }}{{ end }}
