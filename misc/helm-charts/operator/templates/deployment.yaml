@@ -260,6 +260,20 @@ spec:
           runAsNonRoot: true
           seccompProfile:
             type: RuntimeDefault
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: webhook
+            scheme: HTTPS
+          failureThreshold: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: webhook
+            scheme: HTTPS
+          failureThreshold: 1
+          periodSeconds: 10
         volumeMounts:
           - mountPath: /etc/tls
             name: certificate

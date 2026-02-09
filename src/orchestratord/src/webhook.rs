@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0.
 
 use anyhow::anyhow;
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use http::StatusCode;
 use kube::core::Status;
@@ -19,7 +19,9 @@ use mz_cloud_resources::crd::materialize::{v1alpha1, v1alpha2};
 use tracing::warn;
 
 pub fn router() -> Router {
-    Router::new().route("/convert", post(post_convert))
+    Router::new()
+        .route("/convert", post(post_convert))
+        .route("/healthz", get(get_health))
 }
 
 #[derive(Clone, Copy)]
@@ -121,4 +123,8 @@ async fn post_convert(
             )
         }
     }
+}
+
+async fn get_health() -> StatusCode {
+    StatusCode::OK
 }
