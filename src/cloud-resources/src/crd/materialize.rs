@@ -445,7 +445,7 @@ pub mod v1alpha2 {
         /// Labels to apply to the pods.
         pub pod_labels: Option<BTreeMap<String, String>>,
 
-        /// If `forcePromote` is set to the same value as the `status.requestedRolloutHash`,
+        /// If `forcePromote` is set to the same value as the `status.requestedRolloutSpecHash`,
         /// current rollout will skip waiting for clusters in the new
         /// generation to rehydrate before promoting the new environmentd to
         /// leader.
@@ -730,7 +730,7 @@ pub mod v1alpha2 {
         pub fn rollout_requested(&self) -> bool {
             self.status
                 .as_ref()
-                .map(|status| status.requested_rollout_hash.is_some())
+                .map(|status| status.requested_rollout_spec_hash.is_some())
                 .unwrap_or(false)
         }
 
@@ -744,7 +744,7 @@ pub mod v1alpha2 {
                 == self
                     .status
                     .as_ref()
-                    .and_then(|status| status.requested_rollout_hash.as_ref())
+                    .and_then(|status| status.requested_rollout_spec_hash.as_ref())
                 || self.spec.rollout_strategy
                     == MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime
         }
@@ -775,7 +775,7 @@ pub mod v1alpha2 {
                 .conditions
                 .iter()
                 .any(|condition| condition.reason == "ReadyToPromote")
-                && status.requested_rollout_hash.as_deref() == Some(rollout_hash)
+                && status.requested_rollout_spec_hash.as_deref() == Some(rollout_hash)
         }
 
         pub fn is_promoting(&self) -> bool {
@@ -938,7 +938,7 @@ pub mod v1alpha2 {
         /// Used to deny upgrades past 1 major version from the last successful rollout.
         /// When None, we upgrade anyways.
         pub last_completed_rollout_environmentd_image_ref: Option<String>,
-        pub requested_rollout_hash: Option<String>,
+        pub requested_rollout_spec_hash: Option<String>,
         pub conditions: Vec<Condition>,
     }
 
@@ -1038,7 +1038,7 @@ pub mod v1alpha2 {
                     last_completed_rollout_spec_hash: None,
                     last_completed_rollout_environmentd_image_ref: status
                         .last_completed_rollout_environmentd_image_ref,
-                    requested_rollout_hash: None,
+                    requested_rollout_spec_hash: None,
                     conditions: status.conditions,
                 }),
             }

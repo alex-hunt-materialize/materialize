@@ -2768,7 +2768,7 @@ def run(definition: dict[str, Any], expect_fail: bool) -> None:
                 stderr=subprocess.DEVNULL,
             )
         )["items"][0]
-        rollout_spec_hash = mz["status"]["requestedRolloutHash"]
+        rollout_spec_hash = mz["status"]["requestedRolloutSpecHash"]
         assert rollout_spec_hash is not None
         definition["materialize"]["spec"]["forcePromote"] = rollout_spec_hash
         try:
