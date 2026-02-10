@@ -170,7 +170,7 @@ pub mod v1alpha1 {
         /// generation to rehydrate before promoting the new environmentd to
         /// leader.
         #[serde(default)]
-        pub force_promote: Uuid,
+        pub force_promote: String,
         /// This value will be written to an annotation in the generated
         /// environmentd statefulset, in order to force the controller to
         /// detect the generated resources as changed even if no other changes
@@ -289,7 +289,9 @@ pub mod v1alpha1 {
                     force_promote: match value.spec.force_promote {
                         Some(s) => Uuid::try_from(s).unwrap_or(Uuid::nil()),
                         None => Uuid::nil(),
-                    },
+                    }
+                    .hyphenated()
+                    .to_string(),
                     force_rollout: value.spec.force_rollout,
                     // TODO either pull this out so they are the same type,
                     // or add a timeout to the ManuallyPromote variant.
@@ -1001,7 +1003,9 @@ pub mod v1alpha2 {
                     service_account_labels: value.spec.service_account_labels,
                     pod_annotations: value.spec.pod_annotations,
                     pod_labels: value.spec.pod_labels,
-                    force_promote: if value.spec.force_promote.is_nil() {
+                    force_promote: if value.spec.force_promote.is_empty()
+                        || &value.spec.force_promote == "00000000-0000-0000-0000-000000000000"
+                    {
                         None
                     } else {
                         Some(value.spec.force_promote.to_string())
