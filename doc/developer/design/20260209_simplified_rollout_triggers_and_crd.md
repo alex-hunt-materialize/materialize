@@ -141,7 +141,7 @@ If we can convince the API server we don't need this, we just won't implement it
 
 ### 4. Helm Chart Changes
 
-Conversion webhooks only support HTTPS, so we need a certificate for orchestratord.
+Conversion webhooks only support HTTPS, so we need a certificate for orchestratord. This may also be useful in the future, for admission webhooks for example.
 
 We plan to support two options:
 - Automatic generation using cert-manager.
