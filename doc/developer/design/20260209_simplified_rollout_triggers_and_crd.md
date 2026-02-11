@@ -256,7 +256,7 @@ I think this is probably fine, since `forcePromote` only really makes sense if t
 4. **Do we need to optionally disable triggering updates on spec changes in SaaS?**
 We may also need to add a new field to the Materialize CRD spec for whether to trigger updates immediately on spec changes, or if the annotation must trigger them.
 This lets us not trigger updates immediately in SaaS when we update the region-controller to change the Materialize CR.
-We don't change the region-controller often, so maybe this isn't necessary.
+We don't change the region-controller often, and we can always update it to not apply changes to the Materialize resource until we trigger that, so this probably isn't necessary.
 
 5. **Interface changes for helm values**
 What I've got in this proposal probably works, but I'm not sure if it's exactly what we want to lock ourselves to.
@@ -267,3 +267,4 @@ It seemed like a lot to bite off at the same time as these other changes, though
 I'm not sure if it will be backwards compatible to add it later.
 I think it will, but am not certain.
 If we want generation objects, should we consider doing that first?
+This is probably fine either way. We can always do another CRD migration if it turns out to not be compatible with this one.
