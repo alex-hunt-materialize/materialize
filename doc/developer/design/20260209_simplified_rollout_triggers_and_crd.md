@@ -42,15 +42,15 @@ Introduce a new `v1alpha2` version of the Materialize CRD with the following cha
 - Remove `requestRollout` (`Uuid`) - Rollouts are now triggered automatically when the spec hash changes.
 - Remove `inPlaceRollout` (`bool`) - This has been deprecated/ignored for a while, and is replaced with `MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime`.
 - Remove `environmentdIamRoleArn` (`Option<String>`) - This has been deprecated for a while, and is replaced with setting `"eks.amazonaws.com/role-arn"` in `serviceAccountAnnotations` instead. The conversion webhook should move this if it exists, with any conflicting value already present in `serviceAccountAnnotations` taking precedence.
-- Change `forcePromote` from `Uuid` to `Option<String>` - Instead of triggering promotion when matching the UUID of `requestRollout`, it triggers promotion when matching the hash stored in `status.requestedRolloutSpecHash`.
+- Change `forcePromote` from `Uuid` to `Option<String>` - Instead of triggering promotion when matching the UUID of `requestRollout`, it triggers promotion when matching the hash stored in `status.requestedRolloutHash`.
 
 **Status changes:**
-- Replace `lastCompletedRolloutRequest` (`Uuid`) with `lastCompletedRolloutSpecHash` (`Option<String>`) - Stores the spec hash of the last successful rollout. Will be `None` if first deploying or if upgrading from `v1alpha1`.
-- Replace `resourcesHash` (`String`) with `requestedRolloutSpecHash` (`Option<String>`) - Stores the spec hash of the currently requested rollout. Will be `None` when no rollout is ongoing.
+- Replace `lastCompletedRolloutRequest` (`Uuid`) with `lastCompletedRolloutHash` (`Option<String>`) - Stores the spec hash of the last successful rollout. Will be `None` if first deploying or if upgrading from `v1alpha1`.
+- Replace `resourcesHash` (`String`) with `requestedRolloutHash` (`String`) - Stores the spec hash of the currently requested rollout. Will be `None` when no rollout is ongoing.
 
 ### 2. Spec Hash Generation
 
-A new `generate_spec_hash()` method computes a SHA256 hash of the spec fields that affect rollouts:
+A new `generate_rollout_hash()` method computes a SHA256 hash of the spec fields that affect rollouts:
 
 ```rust
 pub fn generate_spec_hash(&self) -> String {
@@ -124,13 +124,14 @@ A new HTTPS webhook server handles CRD version conversion:
 ###### v1alpha1 to v1alpha2:
 - Spec fields:
     - `forcePromote: Uuid` becomes `forcePromote: Option<String>` (nil UUID becomes None)
+    - `requestRollout` is removed.
 - Status fields:
     - `lastCompletedRolloutRequest` and `resourcesHash` are removed.
-    - If `lastCompletedRolloutRequest` and `resourcesHash` match:
+    - If `lastCompletedRolloutRequest` and `spec.requestRollout` match:
         - This means we weren't in the middle of a rollout.
-        - `lastCompletedRolloutSpecHash` should be set to the calculated spec hash (after conversion), and `requestedRolloutSpecHash` should be set to `None`. This should avoid triggering a rollout during the migration.
+        - `lastCompletedRolloutHash` and `requestedRolloutHash` should both be set to the calculated hash (after conversion). This should avoid triggering a rollout during the migration.
     - Else:
-        - `lastCompletedRolloutSpecHash` and `requestedRolloutSpecHash` should both be set to `None`. `requestedRolloutSpecHash` will be set when reconciling. In this case, we likely have an in-progress rollout, which we will destroy and replace.
+        - `lastCompletedRolloutHash` should be set to `None` and `requestedRolloutHash` should be set to the calculated hash (after conversion). In this case, we likely have an in-progress rollout, which we will destroy and replace.
 
 ###### v1alpha2 to v1alpha1:
 
