@@ -1549,6 +1549,22 @@ def workflow_documentation_defaults(
             ]
         )
 
+        spawn.runv(
+            [
+                "helm",
+                "install",
+                "cert-manager",
+                "oci://quay.io/jetstack/charts/cert-manager",
+                "--version",
+                "v1.19.2",
+                "--namespace",
+                "cert-manager",
+                "--create-namespace",
+                "--set",
+                "crds.enabled=true",
+            ]
+        )
+
         shutil.copyfile(
             "misc/helm-charts/operator/values.yaml",
             os.path.join(dir, "sample-values.yaml"),
