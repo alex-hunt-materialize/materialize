@@ -732,7 +732,7 @@ pub mod v1alpha2 {
         pub fn rollout_requested(&self) -> bool {
             self.status
                 .as_ref()
-                .map(|status| status.requested_rollout_spec_hash.is_some())
+                .map(|status| status.requested_rollout_hash.is_some())
                 .unwrap_or(false)
         }
 
@@ -746,7 +746,7 @@ pub mod v1alpha2 {
                 == self
                     .status
                     .as_ref()
-                    .and_then(|status| status.requested_rollout_spec_hash.as_ref())
+                    .and_then(|status| status.requested_rollout_hash.as_ref())
                 || self.spec.rollout_strategy
                     == MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime
         }
@@ -777,7 +777,7 @@ pub mod v1alpha2 {
                 .conditions
                 .iter()
                 .any(|condition| condition.reason == "ReadyToPromote")
-                && status.requested_rollout_spec_hash.as_deref() == Some(rollout_hash)
+                && status.requested_rollout_hash.as_deref() == Some(rollout_hash)
         }
 
         pub fn is_promoting(&self) -> bool {
@@ -935,12 +935,12 @@ pub mod v1alpha2 {
         pub active_generation: u64,
         /// Hash of the last completed rollout's Materialize spec.
         /// This is used to determine when the spec has changed and we need to rollout.
-        pub last_completed_rollout_spec_hash: Option<String>,
+        pub last_completed_rollout_hash: Option<String>,
         /// The image ref of the environmentd image that was last successfully rolled out.
         /// Used to deny upgrades past 1 major version from the last successful rollout.
         /// When None, we upgrade anyways.
         pub last_completed_rollout_environmentd_image_ref: Option<String>,
-        pub requested_rollout_spec_hash: Option<String>,
+        pub requested_rollout_hash: Option<String>,
         pub conditions: Vec<Condition>,
     }
 
@@ -1039,10 +1039,10 @@ pub mod v1alpha2 {
                     resource_id: status.resource_id,
                     active_generation: status.active_generation,
                     // TODO verify that we don't see the same object again.
-                    last_completed_rollout_spec_hash: None,
+                    last_completed_rollout_hash: None,
                     last_completed_rollout_environmentd_image_ref: status
                         .last_completed_rollout_environmentd_image_ref,
-                    requested_rollout_spec_hash: None,
+                    requested_rollout_hash: None,
                     conditions: status.conditions,
                 }),
             }

@@ -190,7 +190,7 @@ impl Context {
         resources: generation::Resources,
         active_generation: u64,
         desired_generation: u64,
-        rollout_spec_hash: String,
+        rollout_hash: String,
     ) -> Result<Option<Action>, Error> {
         if let Some(action) = resources.promote_services(client, &mz.namespace()).await? {
             return Ok(Some(action));
@@ -204,12 +204,13 @@ impl Context {
             mz,
             MaterializeStatus {
                 active_generation: desired_generation,
-                last_completed_rollout_spec_hash: Some(rollout_spec_hash),
+                last_completed_rollout_hash: Some(rollout_hash),
                 last_completed_rollout_environmentd_image_ref: Some(
                     mz.spec.environmentd_image_ref.clone(),
                 ),
                 resource_id: mz.status().resource_id,
-                requested_rollout_spec_hash: None,
+                // TODO set this to the status.requested_rollout_hash
+                requested_rollout_hash: None,
                 conditions: vec![Condition {
                     type_: "UpToDate".into(),
                     status: "True".into(),
@@ -365,7 +366,7 @@ impl k8s_controller::Context for Context {
             != mz
                 .status
                 .as_ref()
-                .and_then(|status| status.last_completed_rollout_spec_hash.as_ref());
+                .and_then(|status| status.last_completed_rollout_hash.as_ref());
 
         let active_generation = status.active_generation;
         let next_generation = active_generation + 1;
@@ -415,12 +416,11 @@ impl k8s_controller::Context for Context {
                             mz,
                             MaterializeStatus {
                                 active_generation,
-                                last_completed_rollout_spec_hash: status
-                                    .last_completed_rollout_spec_hash,
+                                last_completed_rollout_hash: status.last_completed_rollout_hash,
                                 last_completed_rollout_environmentd_image_ref: status
                                     .last_completed_rollout_environmentd_image_ref,
                                 resource_id: status.resource_id.clone(),
-                                requested_rollout_spec_hash: Some(mz_spec_hash.clone()),
+                                requested_rollout_hash: Some(mz_spec_hash.clone()),
                                 conditions: vec![Condition {
                                     type_: "UpToDate".into(),
                                     status: "Unknown".into(),
@@ -448,12 +448,11 @@ impl k8s_controller::Context for Context {
                         mz,
                         MaterializeStatus {
                             active_generation,
-                            last_completed_rollout_spec_hash: status
-                                .last_completed_rollout_spec_hash,
+                            last_completed_rollout_hash: status.last_completed_rollout_hash,
                             last_completed_rollout_environmentd_image_ref:
                                 last_completed_rollout_environmentd_image_ref.clone(),
                             resource_id: status.resource_id,
-                            requested_rollout_spec_hash: status.requested_rollout_spec_hash,
+                            requested_rollout_hash: status.requested_rollout_hash,
                             conditions: vec![Condition {
                                 type_: "UpToDate".into(),
                                 status: "False".into(),
@@ -511,12 +510,11 @@ impl k8s_controller::Context for Context {
                                 mz,
                                 MaterializeStatus {
                                     active_generation,
-                                    last_completed_rollout_spec_hash: status
-                                        .last_completed_rollout_spec_hash,
+                                    last_completed_rollout_hash: status.last_completed_rollout_hash,
                                     last_completed_rollout_environmentd_image_ref: status
                                         .last_completed_rollout_environmentd_image_ref,
                                     resource_id: status.resource_id,
-                                    requested_rollout_spec_hash: Some(mz_spec_hash.clone()),
+                                    requested_rollout_hash: Some(mz_spec_hash.clone()),
                                     conditions: vec![Condition {
                                         type_: "UpToDate".into(),
                                         status: "Unknown".into(),
@@ -545,16 +543,15 @@ impl k8s_controller::Context for Context {
                             mz,
                             MaterializeStatus {
                                 active_generation,
-                                // don't update the last_completed_rollout_spec_hash yet,
+                                // don't update the last_completed_rollout_hash yet,
                                 // because the rollout hasn't yet completed. if
                                 // we fail later on, we want to ensure that the
                                 // rollout gets retried.
-                                last_completed_rollout_spec_hash: status
-                                    .last_completed_rollout_spec_hash,
+                                last_completed_rollout_hash: status.last_completed_rollout_hash,
                                 last_completed_rollout_environmentd_image_ref: status
                                     .last_completed_rollout_environmentd_image_ref,
                                 resource_id: status.resource_id,
-                                requested_rollout_spec_hash: Some(mz_spec_hash.clone()),
+                                requested_rollout_hash: Some(mz_spec_hash.clone()),
                                 conditions: vec![Condition {
                                     type_: "UpToDate".into(),
                                     status: "Unknown".into(),
@@ -589,12 +586,11 @@ impl k8s_controller::Context for Context {
                                 // here, because there was an error during
                                 // the rollout and we want to ensure it gets
                                 // retried.
-                                last_completed_rollout_spec_hash: status
-                                    .last_completed_rollout_spec_hash,
+                                last_completed_rollout_hash: status.last_completed_rollout_hash,
                                 last_completed_rollout_environmentd_image_ref: status
                                     .last_completed_rollout_environmentd_image_ref,
                                 resource_id: status.resource_id,
-                                requested_rollout_spec_hash: status.requested_rollout_spec_hash,
+                                requested_rollout_hash: status.requested_rollout_hash,
                                 conditions: vec![Condition {
                                     type_: "UpToDate".into(),
                                     status: "False".into(),
@@ -633,11 +629,11 @@ impl k8s_controller::Context for Context {
                         mz,
                         MaterializeStatus {
                             active_generation,
-                            last_completed_rollout_spec_hash: Some(mz_spec_hash),
+                            last_completed_rollout_hash: Some(mz_spec_hash),
                             last_completed_rollout_environmentd_image_ref: status
                                 .last_completed_rollout_environmentd_image_ref,
                             resource_id: status.resource_id.clone(),
-                            requested_rollout_spec_hash: None,
+                            requested_rollout_hash: None,
                             conditions: vec![Condition {
                                 type_: "UpToDate".into(),
                                 status: "True".into(),
