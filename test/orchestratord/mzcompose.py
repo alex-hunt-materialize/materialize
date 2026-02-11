@@ -2767,7 +2767,7 @@ def run(definition: dict[str, Any], expect_fail: bool) -> None:
                 stderr=subprocess.DEVNULL,
             )
         )["items"][0]
-        rollout_spec_hash = mz["status"]["requestedRolloutSpecHash"]
+        rollout_spec_hash = mz["status"]["requestedRolloutHash"]
         assert rollout_spec_hash is not None
         definition["materialize"]["spec"]["forcePromote"] = rollout_spec_hash
         try:
@@ -2828,7 +2828,7 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
             status = data["items"][0].get("status")
             if not status:
                 continue
-            if "lastCompletedRolloutSpecHash" not in status:
+            if "lastCompletedRolloutHash" not in status:
                 continue
             if expect_fail:
                 break
@@ -2839,7 +2839,7 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
             ):
                 continue
             # TODO should I check somehow that this is the latest to handle upgrades?
-            if status["lastCompletedRolloutSpecHash"]:
+            if status["lastCompletedRolloutHash"]:
                 break
         except subprocess.CalledProcessError:
             pass

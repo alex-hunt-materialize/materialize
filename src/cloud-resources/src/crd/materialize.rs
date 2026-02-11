@@ -447,7 +447,7 @@ pub mod v1alpha2 {
         /// Labels to apply to the pods.
         pub pod_labels: Option<BTreeMap<String, String>>,
 
-        /// If `forcePromote` is set to the same value as the `status.requestedRolloutSpecHash`,
+        /// If `forcePromote` is set to the same value as the `status.requestedRolloutHash`,
         /// current rollout will skip waiting for clusters in the new
         /// generation to rehydrate before promoting the new environmentd to
         /// leader.
