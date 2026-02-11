@@ -185,6 +185,14 @@ mz_crd.spec.conversion = Some(CustomResourceConversion {
 });
 ```
 
+### 6. Replace all Materialize resources to update their stored versions
+
+We have set v1alpha2 as the stored version, but that doesn't update existing resources. Those are only updated when they are reapplied.
+
+During orchestratord startup, after waiting for the CRD to be established, we need to loop through all Materialize resources and `replace` them.
+
+If it is possible to determine the stored version of these resources, we should only `replace` the ones at the older version.
+
 ## Known testing required
 
 Our existing nightly orchestratord tests cover a lot, but we'll need to extend them to work with multiple CRD versions.
