@@ -258,6 +258,9 @@ pub mod v1alpha1 {
         /// If you want to trigger a rollout without making other changes that would cause this
         /// hash to change, you must set forceRollout to the same UUID as requestRollout.
         pub resources_hash: String,
+        /// The last completed rollout hash from v1alpha2.
+        /// This exists on this older version only for round-trip conversion support.
+        pub last_completed_rollout_hash: Option<String>,
         pub conditions: Vec<Condition>,
     }
 
@@ -326,6 +329,7 @@ pub mod v1alpha1 {
                         .last_completed_rollout_environmentd_image_ref,
                     conditions: status.conditions,
                     last_completed_rollout_request: Uuid::nil(),
+                    last_completed_rollout_hash: status.last_completed_rollout_hash,
                     resources_hash: "".to_owned(),
                 }),
             }
@@ -513,7 +517,7 @@ pub mod v1alpha2 {
     }
 
     impl Materialize {
-        pub fn generate_spec_hash(&self) -> String {
+        pub fn generate_rollout_hash(&self) -> String {
             let mut hasher = Sha256::new();
             // Remove fields that don't affect the resources generated per generation,
             // and we don't want to trigger a rollout from.
@@ -732,12 +736,15 @@ pub mod v1alpha2 {
         pub fn rollout_requested(&self) -> bool {
             self.status
                 .as_ref()
-                .map(|status| status.requested_rollout_hash.is_some())
+                .map(|status| {
+                    status.last_completed_rollout_hash.as_ref()
+                        != Some(&status.requested_rollout_hash)
+                })
                 .unwrap_or(false)
         }
 
         pub fn set_force_promote(&mut self) {
-            self.spec.force_promote = Some(self.generate_spec_hash());
+            self.spec.force_promote = Some(self.generate_rollout_hash());
         }
 
         pub fn should_force_promote(&self) -> bool {
@@ -746,7 +753,7 @@ pub mod v1alpha2 {
                 == self
                     .status
                     .as_ref()
-                    .and_then(|status| status.requested_rollout_hash.as_ref())
+                    .map(|status| &status.requested_rollout_hash)
                 || self.spec.rollout_strategy
                     == MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime
         }
@@ -777,7 +784,7 @@ pub mod v1alpha2 {
                 .conditions
                 .iter()
                 .any(|condition| condition.reason == "ReadyToPromote")
-                && status.requested_rollout_hash.as_deref() == Some(rollout_hash)
+                && status.requested_rollout_hash.as_str() == rollout_hash
         }
 
         pub fn is_promoting(&self) -> bool {
@@ -933,14 +940,15 @@ pub mod v1alpha2 {
         pub resource_id: String,
         /// The generation of Materialize pods actively capable of servicing requests.
         pub active_generation: u64,
-        /// Hash of the last completed rollout's Materialize spec.
-        /// This is used to determine when the spec has changed and we need to rollout.
-        pub last_completed_rollout_hash: Option<String>,
         /// The image ref of the environmentd image that was last successfully rolled out.
         /// Used to deny upgrades past 1 major version from the last successful rollout.
         /// When None, we upgrade anyways.
         pub last_completed_rollout_environmentd_image_ref: Option<String>,
-        pub requested_rollout_hash: Option<String>,
+        /// The last completed rollout's requestedRolloutHash.
+        pub last_completed_rollout_hash: Option<String>,
+        /// Hash of a subset of the Materialize spec and other fields.
+        /// This is used to determine when the spec has changed and we need to rollout.
+        pub requested_rollout_hash: String,
         pub conditions: Vec<Condition>,
     }
 
@@ -980,7 +988,7 @@ pub mod v1alpha2 {
 
     impl From<v1alpha1::Materialize> for Materialize {
         fn from(value: v1alpha1::Materialize) -> Self {
-            Materialize {
+            let mut mz = Materialize {
                 metadata: value.metadata,
                 spec: MaterializeSpec {
                     environmentd_image_ref: value.spec.environmentd_image_ref,
@@ -1035,17 +1043,41 @@ pub mod v1alpha2 {
                     console_external_certificate_spec: value.spec.console_external_certificate_spec,
                     internal_certificate_spec: value.spec.internal_certificate_spec,
                 },
-                status: value.status.map(|status| MaterializeStatus {
-                    resource_id: status.resource_id,
-                    active_generation: status.active_generation,
-                    // TODO verify that we don't see the same object again.
-                    last_completed_rollout_hash: None,
-                    last_completed_rollout_environmentd_image_ref: status
-                        .last_completed_rollout_environmentd_image_ref,
-                    requested_rollout_hash: None,
-                    conditions: status.conditions,
-                }),
-            }
+                status: None,
+            };
+            let calculated_rollout_hash = mz.generate_rollout_hash();
+            let last_completed_rollout_hash = match value
+                .status
+                .as_ref()
+                .and_then(|status| status.last_completed_rollout_hash.to_owned())
+            {
+                Some(last_completed_rollout_hash) => Some(last_completed_rollout_hash),
+                None => {
+                    let currently_rolling_out = value
+                        .status
+                        .as_ref()
+                        .map(|status| {
+                            status.last_completed_rollout_request != value.spec.request_rollout
+                        })
+                        .unwrap_or(true);
+                    if currently_rolling_out {
+                        // If they store a change, we're going to start over on a new rollout.
+                        None
+                    } else {
+                        Some(calculated_rollout_hash.clone())
+                    }
+                }
+            };
+            mz.status = value.status.map(|status| MaterializeStatus {
+                resource_id: status.resource_id,
+                active_generation: status.active_generation,
+                last_completed_rollout_environmentd_image_ref: status
+                    .last_completed_rollout_environmentd_image_ref,
+                last_completed_rollout_hash,
+                requested_rollout_hash: calculated_rollout_hash,
+                conditions: status.conditions,
+            });
+            mz
         }
     }
 }
