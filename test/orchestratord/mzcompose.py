@@ -2863,7 +2863,9 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
                 or status["conditions"][0]["status"] != "True"
             ):
                 continue
-            if status.get("lastCompletedRolloutHash") or status.get("lastCompletedRolloutRequest"):
+            if status.get("lastCompletedRolloutHash") or status.get(
+                "lastCompletedRolloutRequest"
+            ):
                 # TODO should I check somehow that this is the latest to handle upgrades?
                 break
         except subprocess.CalledProcessError:
