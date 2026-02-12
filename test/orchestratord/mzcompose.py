@@ -2716,7 +2716,11 @@ def init(definition: dict[str, Any]) -> None:
             )
             conditions = crd.get("status", {}).get("conditions", [])
             established_condition = next(
-                (condition for condition in conditions if condition["type"] == "Established"),
+                (
+                    condition
+                    for condition in conditions
+                    if condition["type"] == "Established"
+                ),
                 {"status": "False"},
             )
             if established_condition["status"] == "True":
@@ -2733,7 +2737,7 @@ def init(definition: dict[str, Any]) -> None:
     ## EndpointSlice controller / kube-proxy updating iptables rules,
     ## so the conversion webhook may not be reachable via the Service
     ## immediately after helm --wait returns.
-    #for i in range(60):
+    # for i in range(60):
     #    try:
     #        endpoints = spawn.capture(
     #            [
@@ -2753,7 +2757,7 @@ def init(definition: dict[str, Any]) -> None:
     #    except subprocess.CalledProcessError:
     #        pass
     #    time.sleep(1)
-    #else:
+    # else:
     #    raise ValueError("Webhook service endpoints never became available")
 
 
@@ -2914,7 +2918,9 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
                 or status["conditions"][0]["status"] != "True"
             ):
                 continue
-            if status.get("lastCompletedRolloutHash") or status.get("lastCompletedRolloutRequest"):
+            if status.get("lastCompletedRolloutHash") or status.get(
+                "lastCompletedRolloutRequest"
+            ):
                 # TODO should I check somehow that this is the latest to handle upgrades?
                 break
         except subprocess.CalledProcessError:
