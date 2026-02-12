@@ -1613,36 +1613,8 @@ def workflow_documentation_defaults(
                 "args={--kubelet-insecure-tls,--kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP}",
             ]
         )
-        for i in range(120):
-            try:
-                crd = json.loads(
-                    spawn.capture(
-                        [
-                            "kubectl",
-                            "get",
-                            "crd",
-                            "materializes.materialize.cloud",
-                            "-n",
-                            "materialize",
-                            "-o",
-                            "json",
-                        ],
-                        stderr=subprocess.DEVNULL,
-                    )
-                )
-                if "status" in crd and "conditions" in crd["status"]:
-                    for condition in crd["status"]["conditions"]:
-                        if (
-                            condition["type"] == "Established"
-                            and condition["status"] == "True"
-                        ):
-                            break
 
-            except subprocess.CalledProcessError:
-                pass
-            time.sleep(1)
-        else:
-            raise ValueError("Never completed")
+        wait_for_crd_established()
 
         with open(os.path.join(dir, "sample-materialize.yaml")) as f:
             materialize_setup = list(yaml.load_all(f, Loader=yaml.Loader))
@@ -2674,8 +2646,11 @@ def init(definition: dict[str, Any]) -> None:
         upgrade=False,
     )
 
-    # TODO properly wait for this to be established?
-    for i in range(240):
+    wait_for_crd_established()
+
+
+def wait_for_crd_established():
+    for _ in range(240):
         try:
             crd = json.loads(
                 spawn.capture(
@@ -2708,35 +2683,7 @@ def init(definition: dict[str, Any]) -> None:
             pass
         time.sleep(1)
     else:
-        raise ValueError("Never completed")
-
-    ## Wait for the webhook service endpoints to be populated.
-    ## There is a race between a pod being marked Ready and the
-    ## EndpointSlice controller / kube-proxy updating iptables rules,
-    ## so the conversion webhook may not be reachable via the Service
-    ## immediately after helm --wait returns.
-    # for i in range(60):
-    #    try:
-    #        endpoints = spawn.capture(
-    #            [
-    #                "kubectl",
-    #                "get",
-    #                "endpoints",
-    #                "operator-materialize-operator",
-    #                "-n",
-    #                "materialize",
-    #                "-o",
-    #                "jsonpath={.subsets[0].addresses[0].ip}",
-    #            ],
-    #            stderr=subprocess.DEVNULL,
-    #        ).strip()
-    #        if endpoints:
-    #            break
-    #    except subprocess.CalledProcessError:
-    #        pass
-    #    time.sleep(1)
-    # else:
-    #    raise ValueError("Webhook service endpoints never became available")
+        raise ValueError("CRD never became 'Established'")
 
 
 def run(definition: dict[str, Any], expect_fail: bool) -> None:
