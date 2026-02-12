@@ -1058,6 +1058,9 @@ pub mod v1alpha2 {
                         .as_ref()
                         .map(|status| {
                             status.last_completed_rollout_request != value.spec.request_rollout
+                                // If this is the first apply,
+                                // these could both be nil and we still need to do a rollout.
+                                || status.last_completed_rollout_request.is_nil()
                         })
                         .unwrap_or(true);
                     if currently_rolling_out {
