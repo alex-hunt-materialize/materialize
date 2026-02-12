@@ -2844,8 +2844,6 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
             status = data["items"][0].get("status")
             if not status:
                 continue
-            if "lastCompletedRolloutHash" not in status:
-                continue
             if expect_fail:
                 break
             if (
@@ -2854,8 +2852,8 @@ def post_run_check(definition: dict[str, Any], expect_fail: bool) -> None:
                 or status["conditions"][0]["status"] != "True"
             ):
                 continue
-            # TODO should I check somehow that this is the latest to handle upgrades?
-            if status["lastCompletedRolloutHash"]:
+            if status.get("lastCompletedRolloutHash") or status.get("lastCompletedRolloutRequest"):
+                # TODO should I check somehow that this is the latest to handle upgrades?
                 break
         except subprocess.CalledProcessError:
             pass
