@@ -45,8 +45,11 @@ Introduce a new `v1alpha2` version of the Materialize CRD with the following cha
 - Change `forcePromote` from `Uuid` to `Option<String>` - Instead of triggering promotion when matching the UUID of `requestRollout`, it triggers promotion when matching the hash stored in `status.requestedRolloutHash`.
 
 **Status changes:**
-- Replace `lastCompletedRolloutRequest` (`Uuid`) with `lastCompletedRolloutHash` (`Option<String>`) - Stores the spec hash of the last successful rollout. Will be `None` if first deploying or if upgrading from `v1alpha1`.
+- Replace `lastCompletedRolloutRequest` (`Uuid`) with `lastCompletedRolloutHash` (`Option<String>`) - Stores the spec hash of the last successful rollout. Will be `None` if first deploying.
 - Replace `resourcesHash` (`String`) with `requestedRolloutHash` (`String`) - Stores the spec hash of the currently requested rollout. Will be `None` when no rollout is ongoing.
+
+**Important Note!!!**
+We **must not** update `resourcesHash` if a rollout has reached the "promoting" state. At this point we have committed to promoting the current rollout, and do not want to trigger another one until it is complete. After the existing rollout has successfully promoted, another reconciliation will be triggered at which point we will update the `resourcesHash` and trigger a new rollout.
 
 ### 2. Spec Hash Generation
 
@@ -107,6 +110,9 @@ Fields **included** in the hash (changes trigger rollout):
 
 All other spec fields, plus our force-rollout annotation.
 
+Some of these are applied without requiring a rollout, but may require a rollout for some of their effects.
+For example, `serviceAccountAnnotations` may be used to configure the AWS IAM role ARN, but it is unclear if that gets applied to existing pods.
+
 ### 3. Conversion Webhook
 
 A new HTTPS webhook server handles CRD version conversion:
@@ -135,9 +141,12 @@ A new HTTPS webhook server handles CRD version conversion:
 
 ###### v1alpha2 to v1alpha1:
 
-No attempt is made to support v1alpha1 beyond giving a valid v1alpha1 structure. Fields that do not exist in v1alpha2 will have their nil value.
+We need to include the `lastCompletedRolloutHash` from v1alpha2 in v1alpha1 as well. This is required for round tripping from v1alpha2 -> v1alpha1 -> v1alpha2,
+which may happen if a user applies a v1alpha1 change over a v1alpha2 object.
 
-If we can convince the API server we don't need this, we just won't implement it at all.
+In the case there is an existing `lastCompletedRolloutHash`, it should be kept as-is through the round trip. As we never reconcile with v1alpha1, it should only change at v1alpha2, so this should be safe.
+
+No attempt is made to support v1alpha1 beyond giving a valid v1alpha1 structure and supporting round tripping to v1alpha2. Fields that do not exist in v1alpha2 may have their nil value.
 
 ### 4. Helm Chart Changes
 
