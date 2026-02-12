@@ -2123,6 +2123,17 @@ def workflow_orchestratord_upgrade(
         if str(version) != "v26.4.0":
             check_balancerd_version(version)
 
+    # We cannot roll back orchestratord versions once the CRD is updated,
+    # so let's just get a clean cluster and start over.
+    spawn.runv(
+        [
+            "kind",
+            "delete",
+            "cluster",
+            "--name",
+            "kind",
+        ]
+    )
     definition = setup(c, args)
 
     print(f"running orchestratord {versions[-3]}")
