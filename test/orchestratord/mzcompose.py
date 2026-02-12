@@ -1582,32 +1582,10 @@ def workflow_documentation_defaults(
                 with open(os.path.join(dir, file), "wb") as f:
                     f.write(response.content)
 
-        spawn.runv(
-            [
-                "helm",
-                "repo",
-                "add",
-                "materialize",
-                "https://materializeinc.github.io/materialize",
-            ]
-        )
-        spawn.runv(["helm", "repo", "update", "materialize"])
-        spawn.runv(
-            [
-                "helm",
-                "install",
-                "my-materialize-operator",
-                MZ_ROOT / "misc" / "helm-charts" / "operator",
-                "--namespace=materialize",
-                "--create-namespace",
-                "--version",
-                "v26.0.0",
-                "--set",
-                "observability.podMetrics.enabled=true",
-                "-f",
-                os.path.join(dir, "sample-values.yaml"),
-            ]
-        )
+        with open(os.path.join(dir, "sample-values.yaml")) as f:
+            sample_values = yaml.load(f, Loader=yaml.Loader)
+        helm_install_operator(sample_values, upgrade=False)
+
         spawn.runv(
             ["kubectl", "apply", "-f", os.path.join(dir, "sample-postgres.yaml")]
         )
