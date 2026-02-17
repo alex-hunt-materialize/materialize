@@ -209,7 +209,7 @@ impl Context {
                     mz.spec.environmentd_image_ref.clone(),
                 ),
                 resource_id: mz.status().resource_id,
-                requested_rollout_hash: rollout_hash,
+                requested_rollout_hash: Some(rollout_hash),
                 conditions: vec![Condition {
                     type_: "UpToDate".into(),
                     status: "True".into(),
@@ -419,7 +419,7 @@ impl k8s_controller::Context for Context {
                                 last_completed_rollout_environmentd_image_ref: status
                                     .last_completed_rollout_environmentd_image_ref,
                                 resource_id: status.resource_id.clone(),
-                                requested_rollout_hash: mz_spec_hash.clone(),
+                                requested_rollout_hash: Some(mz_spec_hash.clone()),
                                 conditions: vec![Condition {
                                     type_: "UpToDate".into(),
                                     status: "Unknown".into(),
@@ -513,7 +513,7 @@ impl k8s_controller::Context for Context {
                                     last_completed_rollout_environmentd_image_ref: status
                                         .last_completed_rollout_environmentd_image_ref,
                                     resource_id: status.resource_id,
-                                    requested_rollout_hash: mz_spec_hash.clone(),
+                                    requested_rollout_hash: Some(mz_spec_hash.clone()),
                                     conditions: vec![Condition {
                                         type_: "UpToDate".into(),
                                         status: "Unknown".into(),
@@ -550,7 +550,7 @@ impl k8s_controller::Context for Context {
                                 last_completed_rollout_environmentd_image_ref: status
                                     .last_completed_rollout_environmentd_image_ref,
                                 resource_id: status.resource_id,
-                                requested_rollout_hash: mz_spec_hash.clone(),
+                                requested_rollout_hash: Some(mz_spec_hash.clone()),
                                 conditions: vec![Condition {
                                     type_: "UpToDate".into(),
                                     status: "Unknown".into(),
@@ -632,7 +632,7 @@ impl k8s_controller::Context for Context {
                             last_completed_rollout_environmentd_image_ref: status
                                 .last_completed_rollout_environmentd_image_ref,
                             resource_id: status.resource_id.clone(),
-                            requested_rollout_hash: mz_spec_hash,
+                            requested_rollout_hash: Some(mz_spec_hash),
                             conditions: vec![Condition {
                                 type_: "UpToDate".into(),
                                 status: "True".into(),

@@ -264,6 +264,36 @@ pub mod v1alpha1 {
         pub conditions: Vec<Condition>,
     }
 
+    impl Materialize {
+        pub fn is_promoting(&self) -> bool {
+            let Some(status) = self.status.as_ref() else {
+                return false;
+            };
+            if status.conditions.is_empty() {
+                return false;
+            }
+            status
+                .conditions
+                .iter()
+                .any(|condition| condition.reason == "Promoting")
+        }
+
+        pub fn update_in_progress(&self) -> bool {
+            let Some(status) = self.status.as_ref() else {
+                return false;
+            };
+            if status.conditions.is_empty() {
+                return false;
+            }
+            for condition in &status.conditions {
+                if condition.type_ == "UpToDate" && condition.status == "Unknown" {
+                    return true;
+                }
+            }
+            false
+        }
+    }
+
     impl From<v1alpha2::Materialize> for Materialize {
         fn from(value: v1alpha2::Materialize) -> Self {
             Materialize {
@@ -736,10 +766,7 @@ pub mod v1alpha2 {
         pub fn rollout_requested(&self) -> bool {
             self.status
                 .as_ref()
-                .map(|status| {
-                    status.last_completed_rollout_hash.as_ref()
-                        != Some(&status.requested_rollout_hash)
-                })
+                .map(|status| status.last_completed_rollout_hash != status.requested_rollout_hash)
                 .unwrap_or(false)
         }
 
@@ -753,7 +780,7 @@ pub mod v1alpha2 {
                 == self
                     .status
                     .as_ref()
-                    .map(|status| &status.requested_rollout_hash)
+                    .and_then(|status| status.requested_rollout_hash.as_ref())
                 || self.spec.rollout_strategy
                     == MaterializeRolloutStrategy::ImmediatelyPromoteCausingDowntime
         }
@@ -784,7 +811,7 @@ pub mod v1alpha2 {
                 .conditions
                 .iter()
                 .any(|condition| condition.reason == "ReadyToPromote")
-                && status.requested_rollout_hash.as_str() == rollout_hash
+                && status.requested_rollout_hash.as_deref() == Some(rollout_hash)
         }
 
         pub fn is_promoting(&self) -> bool {
@@ -948,7 +975,7 @@ pub mod v1alpha2 {
         pub last_completed_rollout_hash: Option<String>,
         /// Hash of a subset of the Materialize spec and other fields.
         /// This is used to determine when the spec has changed and we need to rollout.
-        pub requested_rollout_hash: String,
+        pub requested_rollout_hash: Option<String>,
         pub conditions: Vec<Condition>,
     }
 
@@ -988,6 +1015,7 @@ pub mod v1alpha2 {
 
     impl From<v1alpha1::Materialize> for Materialize {
         fn from(value: v1alpha1::Materialize) -> Self {
+            let is_promoting = value.is_promoting();
             let mut mz = Materialize {
                 metadata: value.metadata,
                 spec: MaterializeSpec {
@@ -1071,13 +1099,18 @@ pub mod v1alpha2 {
                     }
                 }
             };
+            let requested_rollout_hash = if is_promoting {
+                None
+            } else {
+                Some(calculated_rollout_hash)
+            };
             mz.status = value.status.map(|status| MaterializeStatus {
                 resource_id: status.resource_id,
                 active_generation: status.active_generation,
                 last_completed_rollout_environmentd_image_ref: status
                     .last_completed_rollout_environmentd_image_ref,
                 last_completed_rollout_hash,
-                requested_rollout_hash: calculated_rollout_hash,
+                requested_rollout_hash,
                 conditions: status.conditions,
             });
             mz
