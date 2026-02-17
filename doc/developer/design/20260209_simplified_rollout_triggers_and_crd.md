@@ -56,12 +56,14 @@ We **must not** update `resourcesHash` if a rollout has reached the "promoting" 
 A new `generate_rollout_hash()` method computes a SHA256 hash of the spec fields that affect rollouts:
 
 ```rust
-pub fn generate_spec_hash(&self) -> String {
+pub fn generate_rollout_hash(&self) -> String {
     let mut hasher = Sha256::new();
     // Hash only fields that should trigger a rollout.
     // Excludes: balancerd/console resources, forcePromote, certificates
     // Exclusions are omitted here for brevity.
-    hasher.update(&serde_json::to_vec(&spec).unwrap());
+    let mut value = serde_json::to_value(&spec).unwrap();
+    value.sort_all_objects();
+    hasher.update(&serde_json::to_vec(&value).unwrap());
     // Include force_rollout annotation for manual triggers.
     // This is future planning so we can trigger rollouts without conflicting
     // with terraform-managed fields.
@@ -133,11 +135,14 @@ A new HTTPS webhook server handles CRD version conversion:
     - `requestRollout` is removed.
 - Status fields:
     - `lastCompletedRolloutRequest` and `resourcesHash` are removed.
+    - `conditions` are kept as-is.
     - If `lastCompletedRolloutRequest` and `spec.requestRollout` match:
         - This means we weren't in the middle of a rollout.
         - `lastCompletedRolloutHash` and `requestedRolloutHash` should both be set to the calculated hash (after conversion). This should avoid triggering a rollout during the migration.
     - Else:
         - `lastCompletedRolloutHash` should be set to `None` and `requestedRolloutHash` should be set to the calculated hash (after conversion). In this case, we likely have an in-progress rollout, which we will destroy and replace.
+        - If we are already in "promoting" status, we should unconditionally complete the promotion for the current rollout rather than destroying and replacing it.
+            This may trigger an additional rollout this one time, but I don't know any way around that. I think this is acceptable given the user is doing something very weird by updating orchestratord mid-rollout.
 
 ###### v1alpha2 to v1alpha1:
 
@@ -147,6 +152,46 @@ which may happen if a user applies a v1alpha1 change over a v1alpha2 object.
 In the case there is an existing `lastCompletedRolloutHash`, it should be kept as-is through the round trip. As we never reconcile with v1alpha1, it should only change at v1alpha2, so this should be safe.
 
 No attempt is made to support v1alpha1 beyond giving a valid v1alpha1 structure and supporting round tripping to v1alpha2. Fields that do not exist in v1alpha2 may have their nil value.
+
+##### Example round trips
+
+In these examples, we assume that orchestratord's attempt to update the stored version succeeds and that reconciliation is triggered after this update. This is only to simplify this document, and is not necessary for correctness. If orchestratord's attempt to update the stored version fails, or the reconciliation is triggered first, the conversion webhook is simply called at that time and we will reconcile the same v1alpha2 object.
+
+###### Simplest case
+1. There is a stored v1alpha1 Materialize resource, not actively rolling out, with both `status.lastCompletedRolloutRequest` and `spec.requestRollout` matching.
+1. Orchestratord gets updated to a version with v1alpha2 support.
+1. Orchestratord lists existing v1alpha1 resources on startup, in order to upgrade them to v1alpha2.
+    1. The API server calls the conversion webhook, which returns a v1alpha2 resource. In this case, it would have `status.lastCompletedRolloutHash` and `status.requestedRolloutHash` set to the same calculated hash after conversion.
+1. Orchestratord calls `replace` to store the resource as v1alpha2.
+1. Orchestratord gets notified of the new v1alpha2 resource, but determines there is nothing to do.
+
+At this point, the stored version is v1alpha2, and no rollout is triggered.
+
+1. The user then applies a v1alpha1 resource. It contains some change that affects the hash (ie: `spec.environmentd_image_ref`). It may or may not include `spec.requestRollout`, that doesn't matter.
+1. Before storing this change, the API server calls the conversion webhook, which returns a v1alpha2 resource. In this case, it should not contain a status, as the user applied v1alpha1 resource did not contain a status (TODO verify this).
+1. Orchestratord gets notified of the new v1alpha2 resource, which contains the old status not yet updated after the applied v1alpha1 resource. This means the `status.lastCompletedRolloutHash` and `status.requestedRolloutHash` still match each other, but do not match the calculated hash.
+1. Orchestratord reconciles like normal, calculating a new `status.requestedRolloutHash` and triggering a rollout since it is different.
+
+If the user had instead applied a v1alpha2 resource instead, no conversion would be needed and orchestratord would reconcile it directly.
+
+###### Existing v1alpha1 resource is mid-upgrade, but not promoting
+1. There is a stored v1alpha1 Materialize resource, actively rolling out, with `status.lastCompletedRolloutRequest` and `spec.requestRollout` not matching. It is not in "promoting" status.
+1. Orchestratord gets updated to a version with v1alpha2 support.
+1. Orchestratord lists existing v1alpha1 resources on startup, in order to upgrade them to v1alpha2.
+    1. The API server calls the conversion webhook, which returns a v1alpha2 resource. In this case, it would have `status.lastCompletedRolloutHash` set to `None` and `status.requestedRolloutHash` set to the calculated hash after conversion.
+1. Orchestratord calls `replace` to store the resource as v1alpha2.
+1. Orchestratord gets notified of the new v1alpha2 resource.
+1. Orchestratord reconciles like normal, continuing the existing rollout and overwriting any objects that are different. This is the same behavior it would have with current orchestratord and v1alpha1.
+
+###### Existing v1alpha1 resource is mid-upgrade and already promoting
+1. There is a stored v1alpha1 Materialize resource, actively rolling out, with `status.lastCompletedRolloutRequest` and `spec.requestRollout` not matching. It is in "promoting" status.
+1. Orchestratord gets updated to a version with v1alpha2 support.
+1. Orchestratord lists existing v1alpha1 resources on startup, in order to upgrade them to v1alpha2.
+    1. The API server calls the conversion webhook, which returns a v1alpha2 resource. In this case, it would have `status.lastCompletedRolloutHash` set to `None` and `status.requestedRolloutHash` set to the calculated hash after conversion.
+1. Orchestratord calls `replace` to store the resource as v1alpha2.
+1. Orchestratord gets notified of the new v1alpha2 resource.
+1. Orchestratord reconciles like normal. Critically, it unconditionally continues with promotion rather than overwriting any objects.
+1. After promotion is successful, the updated status triggers a new rollout. (TODO verify that this works if we have a `status.requestedRolloutHash` set in the initial conversion)
 
 ### 4. Helm Chart Changes
 
@@ -202,6 +247,11 @@ During orchestratord startup, after waiting for the CRD to be established, we ne
 
 If it is possible to determine the stored version of these resources, we should only `replace` the ones at the older version.
 
+I think it is OK for this to be best-effort, and only warn in case of failure.
+For backward compatibility reasons, we're going to have to support the old version for some time.
+Orchestratord is likely to get restarted/upgraded multiple times in that period, so it can try again.
+If the user ever writes an updated CR, it will also be stored in v1alpha2, so it isn't critical that this work immediately.
+
 ## Known testing required
 
 Our existing nightly orchestratord tests cover a lot, but we'll need to extend them to work with multiple CRD versions.
@@ -210,6 +260,8 @@ Our existing nightly orchestratord tests cover a lot, but we'll need to extend t
 - Upgrades from existing v1alpha1 environments by applying v1alpha2 CR.
 - Upgrades from existing v1alpha2 environments by applying v1alpha1 CR.
 - Upgrades from existing v1alpha2 environments by applying v1alpha2 CR.
+- Upgrade from existing v1alpha1 environment that is mid-rollout not in "promoting" status.
+- Upgrade from existing v1alpha1 environment that is mid-rollout in "promoting" status.
 - Upgrades with a previous rollout already in progress.
 - Upgrades triggered by annotation.
 - Deploy of latest Materialize image versions using v1alpha2 CR.
