@@ -1484,7 +1484,12 @@ class MaterializeCRDVersion(Modification):
         return "materialize.cloud/v1alpha2"
 
     def modify(self, definition: dict[str, Any]) -> None:
-        definition["materialize"]["apiVersion"] = self.value
+        operator_version = Version.parse(definition["operator"]["operator"]["image"]["tag"].removeprefix("v"))
+        if operator_version >= Version.parse("26.13.0-dev.0"):
+            definition["materialize"]["apiVersion"] = self.value
+        else:
+            # Older versions do not support v1alpha2
+            definition["materialize"]["apiVersion"] = "materialize.cloud/v1alpha1"
 
     def validate(self, mods: dict[type[Modification], Any]) -> None:
         # TODO (Alex Hunt)
