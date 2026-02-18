@@ -1949,7 +1949,8 @@ def workflow_upgrade_downtime(c: Composition, parser: WorkflowArgumentParser) ->
     thread.start()
     time.sleep(10)  # some time to make sure the thread runs fine
     request = str(uuid.uuid4())
-    definition["materialize"]["spec"]["requestRollout"] = request
+    if definition["materialize"]["apiVersion"] == "materialize.cloud/v1alpha1":
+        definition["materialize"]["spec"]["requestRollout"] = request
     definition["materialize"]["spec"]["forceRollout"] = request
     run(definition, False)
     time.sleep(120)  # some time to make sure there is no downtime later
@@ -2121,7 +2122,8 @@ def workflow_orchestratord_upgrade(
             c.compose["services"]["environmentd"]["image"],
             str(version),
         )
-        definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
+        if definition["materialize"]["apiVersion"] == "materialize.cloud/v1alpha1":
+            definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
         run(definition, False)
         check_environmentd_version(version)
         check_clusterd_version(version)
@@ -2167,7 +2169,8 @@ def workflow_orchestratord_upgrade(
         c.compose["services"]["environmentd"]["image"],
         str(versions[-1]),
     )
-    definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
+    if definition["materialize"]["apiVersion"] == "materialize.cloud/v1alpha1":
+        definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
     run(definition, False)
     check_environmentd_version(versions[-1])
     check_clusterd_version(versions[-1])
@@ -2579,7 +2582,8 @@ def run_scenario(
                 values=definition["operator"],
                 upgrade=True,
             )
-            definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
+            if definition["materialize"]["apiVersion"] == "materialize.cloud/v1alpha1":
+                definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
             run(definition, expect_fail)
         mod_dict = {mod.__class__: mod.value for mod in mods}
         for subclass in all_subclasses(Modification):
