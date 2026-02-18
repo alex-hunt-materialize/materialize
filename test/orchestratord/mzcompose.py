@@ -1484,8 +1484,7 @@ class MaterializeCRDVersion(Modification):
         return "materialize.cloud/v1alpha2"
 
     def modify(self, definition: dict[str, Any]) -> None:
-        operator_version = Version.parse(definition["operator"]["operator"]["image"]["tag"].removeprefix("v"))
-        if operator_version >= Version.parse("26.13.0-dev.0"):
+        if operator_supports_v1alpha2(definition):
             definition["materialize"]["apiVersion"] = self.value
         else:
             # Older versions do not support v1alpha2
@@ -1495,6 +1494,13 @@ class MaterializeCRDVersion(Modification):
         # TODO (Alex Hunt)
         # This may be OK without additional validation, as we check we deployed in post_run_check
         return
+
+
+def operator_supports_v1alpha2(definition: dict[str, Any]):
+    operator_version = Version.parse(definition["operator"]["operator"]["image"]["tag"].removeprefix("v"))
+    if operator_version >= Version.parse("26.13.0-dev.0"):
+        return True
+    return False
 
 
 class Properties(Enum):
@@ -2101,8 +2107,22 @@ def workflow_orchestratord_upgrade(
     versions = get_all_self_managed_versions()
     versions.append(get_version(args.tag))
 
+    def set_latest_supported_crd_version(definition: dict[str, Any]):
+        if operator_supports_v1alpha2(definition):
+            definition["materialize"]["apiVersion"] = "materialize.cloud/v1alpha2"
+        else:
+            definition["materialize"]["apiVersion"] = "materialize.cloud/v1alpha1"
+
+    def request_rollout_if_needed(definition: dict[str, Any]):
+        if definition["materialize"]["apiVersion"] == "materialize.cloud/v1alpha1":
+            definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
+        else:
+            definition["materialize"]["spec"].pop("requestRollout", None)
+
+
     print(f"running orchestratord {versions[-3]}")
     definition["operator"]["operator"]["image"]["tag"] = str(versions[-3])
+    set_latest_supported_crd_version(definition)
     init(definition)
     check_orchestratord_version(versions[-3])
 
@@ -2127,8 +2147,8 @@ def workflow_orchestratord_upgrade(
             c.compose["services"]["environmentd"]["image"],
             str(version),
         )
-        if definition["materialize"]["apiVersion"] == "materialize.cloud/v1alpha1":
-            definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
+        set_latest_supported_crd_version(definition)
+        request_rollout_if_needed(definition)
         run(definition, False)
         check_environmentd_version(version)
         check_clusterd_version(version)
@@ -2151,6 +2171,7 @@ def workflow_orchestratord_upgrade(
 
     print(f"running orchestratord {versions[-3]}")
     definition["operator"]["operator"]["image"]["tag"] = str(versions[-3])
+    set_latest_supported_crd_version(definition)
     init(definition)
     check_orchestratord_version(versions[-3])
 
@@ -2174,8 +2195,8 @@ def workflow_orchestratord_upgrade(
         c.compose["services"]["environmentd"]["image"],
         str(versions[-1]),
     )
-    if definition["materialize"]["apiVersion"] == "materialize.cloud/v1alpha1":
-        definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
+    set_latest_supported_crd_version(definition)
+    request_rollout_if_needed(definition)
     run(definition, False)
     check_environmentd_version(versions[-1])
     check_clusterd_version(versions[-1])
