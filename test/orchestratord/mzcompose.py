@@ -1471,6 +1471,27 @@ class RolloutStrategy(Modification):
         return
 
 
+class MaterializeCRDVersion(Modification):
+    @classmethod
+    def values(cls, version: MzVersion) -> list[Any]:
+        return [
+            "materialize.cloud/v1alpha1",
+            "materialize.cloud/v1alpha2",
+        ]
+
+    @classmethod
+    def default(cls) -> Any:
+        return "materialize.cloud/v1alpha2"
+
+    def modify(self, definition: dict[str, Any]) -> None:
+        definition["materialize"]["apiVersion"] = self.value
+
+    def validate(self, mods: dict[type[Modification], Any]) -> None:
+        # TODO (Alex Hunt)
+        # This may be OK without additional validation, as we check we deployed in post_run_check
+        return
+
+
 class Properties(Enum):
     Defaults = "defaults"
     Individual = "individual"
