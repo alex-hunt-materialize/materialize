@@ -46,10 +46,10 @@ Introduce a new `v1alpha2` version of the Materialize CRD with the following cha
 
 **Status changes:**
 - Replace `lastCompletedRolloutRequest` (`Uuid`) with `lastCompletedRolloutHash` (`Option<String>`) - Stores the spec hash of the last successful rollout. Will be `None` if first deploying.
-- Replace `resourcesHash` (`String`) with `requestedRolloutHash` (`String`) - Stores the spec hash of the currently requested rollout. Will be `None` when no rollout is ongoing.
+- Replace `resourcesHash` (`String`) with `requestedRolloutHash` (`Option<String>`) - Stores the spec hash of the currently requested rollout. Will be `None` when migrating from v1alpha1 while already in mid-rollout and in "promoting" status.
 
 **Important Note!!!**
-We **must not** update `resourcesHash` if a rollout has reached the "promoting" state. At this point we have committed to promoting the current rollout, and do not want to trigger another one until it is complete. After the existing rollout has successfully promoted, another reconciliation will be triggered at which point we will update the `resourcesHash` and trigger a new rollout.
+We **must not** update `requestedRolloutHash` if a rollout has reached the "promoting" state. At this point we have committed to promoting the current rollout, and do not want to trigger another one until it is complete. After the existing rollout has successfully promoted, another reconciliation will be triggered at which point we will update the `requestedRolloutHash` and trigger a new rollout.
 
 ### 2. Spec Hash Generation
 
