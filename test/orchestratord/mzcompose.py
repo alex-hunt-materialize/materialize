@@ -2114,9 +2114,7 @@ def scale_orchestratord(replicas: int) -> None:
         if running == replicas:
             return
         time.sleep(1)
-    raise RuntimeError(
-        f"Orchestratord never scaled to {replicas} replicas"
-    )
+    raise RuntimeError(f"Orchestratord never scaled to {replicas} replicas")
 
 
 def patch_materialize_status_promoting() -> None:
@@ -2260,7 +2258,7 @@ def workflow_mid_rollout_migration(
         definition["materialize"],
     ]
     yaml_str = yaml.dump_all(defs)
-    print(f"Applying mid-rollout change...")
+    print("Applying mid-rollout change...")
     spawn.runv(
         ["kubectl", "apply", "-f", "-"],
         stdin=yaml_str.encode(),
@@ -2398,9 +2396,9 @@ def workflow_mid_rollout_migration(
     patch_materialize_status_promoting()
 
     # Verify the patch took effect
-    assert get_materialize_condition_reason() == "Promoting", (
-        "Status should be Promoting after patch"
-    )
+    assert (
+        get_materialize_condition_reason() == "Promoting"
+    ), "Status should be Promoting after patch"
     print("Status is now Promoting")
 
     # Upgrade orchestratord to the new version.

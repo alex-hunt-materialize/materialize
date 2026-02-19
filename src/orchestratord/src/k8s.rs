@@ -199,10 +199,8 @@ pub async fn migrate_materialize_storage_version(client: Client) -> Result<(), a
     for mz in mz_list.items {
         let name = mz.name_unchecked();
         let namespace = mz.namespace();
-        let namespaced_api = Api::<crd::materialize::v1alpha2::Materialize>::namespaced(
-            client.clone(),
-            &namespace,
-        );
+        let namespaced_api =
+            Api::<crd::materialize::v1alpha2::Materialize>::namespaced(client.clone(), &namespace);
         match replace_resource(&namespaced_api, &mz).await {
             Ok(_) => {
                 info!(
