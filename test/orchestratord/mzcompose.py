@@ -1497,7 +1497,9 @@ class MaterializeCRDVersion(Modification):
 
 
 def operator_supports_v1alpha2(definition: dict[str, Any]):
-    operator_version = Version.parse(definition["operator"]["operator"]["image"]["tag"].removeprefix("v"))
+    operator_version = Version.parse(
+        definition["operator"]["operator"]["image"]["tag"].removeprefix("v")
+    )
     if operator_version >= Version.parse("26.13.0-dev.0"):
         return True
     return False
@@ -2118,7 +2120,6 @@ def workflow_orchestratord_upgrade(
             definition["materialize"]["spec"]["requestRollout"] = str(uuid.uuid4())
         else:
             definition["materialize"]["spec"].pop("requestRollout", None)
-
 
     print(f"running orchestratord {versions[-3]}")
     definition["operator"]["operator"]["image"]["tag"] = str(versions[-3])
