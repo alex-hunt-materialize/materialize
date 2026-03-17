@@ -1393,14 +1393,17 @@ class ConsoleResources(Modification):
             }
 
         def check_pods() -> None:
-            console = get_console_data()["items"][0]
+            console_data = get_console_data()
+            assert len(console_data["items"]) > 0, "No console pods found"
+            console = console_data["items"][0]
 
             resources = console["spec"]["containers"][0]["resources"]
             assert (
                 resources == expected
             ), f"Expected console resources {expected}, but got {resources}"
 
-        retry(check_pods, 240)
+        # Console is launched last and can take a while during upgrades
+        retry(check_pods, 480)
 
 
 class AuthenticatorKind(Modification):
