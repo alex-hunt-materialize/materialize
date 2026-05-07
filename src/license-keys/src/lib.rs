@@ -44,6 +44,10 @@ pub struct ValidatedLicenseKey {
     pub allow_credit_consumption_override: bool,
     pub expiration_behavior: ExpirationBehavior,
     pub expired: bool,
+    /// Optional feature flags / third-party integrations enabled for this key
+    /// (e.g. `"ory"` to permit pulling images through the OCI registry proxy).
+    /// Empty for keys that predate this field.
+    pub entitlements: Vec<String>,
 }
 
 impl ValidatedLicenseKey {
@@ -59,6 +63,7 @@ impl ValidatedLicenseKey {
             allow_credit_consumption_override: true,
             expiration_behavior: ExpirationBehavior::Warn,
             expired: false,
+            entitlements: Vec::new(),
         }
     }
 
@@ -74,7 +79,13 @@ impl ValidatedLicenseKey {
             allow_credit_consumption_override: true,
             expiration_behavior: ExpirationBehavior::Warn,
             expired: false,
+            entitlements: Vec::new(),
         }
+    }
+
+    /// Returns true if `entitlement` is present in this key.
+    pub fn has_entitlement(&self, entitlement: &str) -> bool {
+        self.entitlements.iter().any(|e| e == entitlement)
     }
 
     pub fn max_credit_consumption_rate(&self) -> Option<f64> {
@@ -106,6 +117,7 @@ impl Default for ValidatedLicenseKey {
             allow_credit_consumption_override: false,
             expiration_behavior: ExpirationBehavior::Disable,
             expired: false,
+            entitlements: Vec::new(),
         }
     }
 }
@@ -176,6 +188,11 @@ struct Payload {
     #[serde(default, skip_serializing_if = "is_default")]
     allow_credit_consumption_override: bool,
     expiration_behavior: ExpirationBehavior,
+    // Defaulted + skipped-when-empty so keys issued before entitlements
+    // existed continue to validate and we don't bloat keys that don't need
+    // any entitlements.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    entitlements: Vec<String>,
 }
 
 fn validate_with_pubkey_v1(
@@ -231,6 +248,7 @@ fn validate_with_pubkey_v1(
         allow_credit_consumption_override: jwt.claims.allow_credit_consumption_override,
         expiration_behavior: jwt.claims.expiration_behavior,
         expired,
+        entitlements: jwt.claims.entitlements,
     })
 }
 
